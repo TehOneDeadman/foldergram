@@ -8,7 +8,13 @@ import type {
   CollectionMutationResult,
   CollectionsPayload,
   CreateCollectionResult,
+  CreateFolderShareLinkInput,
+  CreateFolderShareLinkResult,
   DeleteCollectionResult,
+  FolderShareAccessState,
+  FolderShareLinksPayload,
+  FolderSharePasswordMutationResult,
+  FolderShareUnlockResult,
   FolderStoriesPayload,
   FolderStoryFeedPayload,
   HomeFeedDefaultSetting,
@@ -16,6 +22,9 @@ import type {
   UpdateExcludedFoldersSettingResult,
   NestedFolderTitleFormatSetting,
   ReelsFeedDefaultSetting,
+  SharedFolderImagesPayload,
+  SharedFolderSummary,
+  SharedImageDetail,
   StoriesModeSetting,
   ViewerAccessMode,
   DeleteImageResult,
@@ -181,6 +190,88 @@ export function setFolderCover(slug: string, imageId: number) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ imageId })
   });
+}
+
+export function fetchFolderShareLinks(slug: string) {
+  return requestJson<FolderShareLinksPayload>(`/api/admin/folders/${encodeURIComponent(slug)}/share-links`);
+}
+
+export function createFolderShareLink(slug: string, input: CreateFolderShareLinkInput) {
+  return requestJson<CreateFolderShareLinkResult>(`/api/admin/folders/${encodeURIComponent(slug)}/share-links`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+}
+
+export function revokeFolderShareLink(slug: string, linkId: number) {
+  return requestJson<{ ok: boolean; link: CreateFolderShareLinkResult['link'] }>(
+    `/api/admin/folders/${encodeURIComponent(slug)}/share-links/${linkId}`,
+    {
+      method: 'DELETE'
+    }
+  );
+}
+
+export function setFolderSharePassword(slug: string, password: string) {
+  return requestJson<FolderSharePasswordMutationResult>(`/api/admin/folders/${encodeURIComponent(slug)}/share-password`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+}
+
+export function removeFolderSharePassword(slug: string) {
+  return requestJson<FolderSharePasswordMutationResult>(`/api/admin/folders/${encodeURIComponent(slug)}/share-password`, {
+    method: 'DELETE'
+  });
+}
+
+export function fetchSharedFolderAccess(slug: string) {
+  return requestJson<FolderShareAccessState>(`/api/share/folders/${encodeURIComponent(slug)}/access`);
+}
+
+export function unlockSharedFolderLink(slug: string, token: string) {
+  return requestJson<FolderShareUnlockResult>(`/api/share/folders/${encodeURIComponent(slug)}/unlock-link`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token })
+  });
+}
+
+export function unlockSharedFolderPassword(slug: string, password: string) {
+  return requestJson<FolderShareUnlockResult>(`/api/share/folders/${encodeURIComponent(slug)}/unlock-password`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+}
+
+export function fetchSharedFolder(slug: string) {
+  return requestJson<SharedFolderSummary>(`/api/share/folders/${encodeURIComponent(slug)}`);
+}
+
+export function fetchSharedFolderImages(slug: string, page = 1, limit = 24, mediaType?: 'image' | 'video') {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit)
+  });
+
+  if (mediaType) {
+    params.set('mediaType', mediaType);
+  }
+
+  return requestJson<SharedFolderImagesPayload>(`/api/share/folders/${encodeURIComponent(slug)}/images?${params.toString()}`);
+}
+
+export function fetchSharedImage(id: number, mediaType?: 'image' | 'video') {
+  const params = new URLSearchParams();
+  if (mediaType) {
+    params.set('mediaType', mediaType);
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  return requestJson<SharedImageDetail>(`/api/share/images/${id}${suffix}`);
 }
 
 export function fetchImage(id: number, mediaType?: 'image' | 'video') {

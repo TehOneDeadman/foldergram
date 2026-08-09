@@ -1,4 +1,5 @@
 import { databaseManager } from './database.js';
+import { SHARE_SESSION_SECRET_SETTING_KEY } from '../constants/app-setting-keys.js';
 import { normalizePath, safeJoin } from '../utils/path-utils.js';
 import { resolveUniqueSlug, slugifyFolderName } from '../utils/slug.js';
 import type {
@@ -11,6 +12,8 @@ import type {
   FolderImageOrder,
   FolderRole,
   FolderScanStateRecord,
+  FolderShareLinkRecord,
+  FolderSharePasswordRecord,
   ImageDetail,
   ImageRecord,
   LikeRecord,
@@ -26,7 +29,15 @@ import type {
   TakenAtSource
 } from '../types/models.js';
 
-const database = databaseManager.connection;
+import type { DatabaseSync } from 'node:sqlite';
+
+const database = new Proxy({} as DatabaseSync, {
+  get(_target, prop) {
+    const conn = databaseManager.connection as any;
+    const value = conn[prop];
+    return typeof value === 'function' ? value.bind(conn) : value;
+  }
+});
 const EFFECTIVE_FEED_TIME_SQL = 'COALESCE(images.taken_at, images.sort_timestamp)';
 const DEFAULT_COLLECTION_SLUG = 'saved';
 const DEFAULT_COLLECTION_NAME = 'Saved';
@@ -301,6 +312,19 @@ export interface UpsertFolderInput {
 export interface SaveFolderResult {
   folder: FolderRecord;
   wrote: boolean;
+}
+
+export interface CreateFolderShareLinkInput {
+  folderId: number;
+  tokenHash: string;
+  tokenPrefix: string;
+  expiresAt: string | null;
+}
+
+export interface UpsertFolderSharePasswordInput {
+  folderId: number;
+  passwordHash: string;
+  passwordSalt: string;
 }
 
 export interface UpsertImageInput {
@@ -2314,6 +2338,132 @@ export const collectionRepository = {
   }
 };
 
+export const folderShareLinkRepository = {
+  create(input: CreateFolderShareLinkInput): FolderShareLinkRecord {
+    database
+      .prepare(
+        `
+        INSERT INTO folder_share_links (
+          folder_id,
+          token_hash,
+          token_prefix,
+          expires_at,
+          allow_original_downloads,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, 0, ?)
+        `
+      )
+      .run(
+        input.folderId,
+        input.tokenHash,
+        input.tokenPrefix,
+        input.expiresAt,
+        nowIso()
+      );
+
+    return this.getByTokenHash(input.tokenHash) as FolderShareLinkRecord;
+  },
+
+  getById(id: number): FolderShareLinkRecord | undefined {
+    return database.prepare('SELECT * FROM folder_share_links WHERE id = ?').get(id) as FolderShareLinkRecord | undefined;
+  },
+
+  getByTokenHash(tokenHash: string): FolderShareLinkRecord | undefined {
+    return database
+      .prepare('SELECT * FROM folder_share_links WHERE token_hash = ?')
+      .get(tokenHash) as FolderShareLinkRecord | undefined;
+  },
+
+  listByFolder(folderId: number): FolderShareLinkRecord[] {
+    return database
+      .prepare(
+        `
+        SELECT *
+        FROM folder_share_links
+        WHERE folder_id = ?
+        ORDER BY created_at DESC, id DESC
+        `
+      )
+      .all(folderId) as unknown as FolderShareLinkRecord[];
+  },
+
+  revoke(id: number, folderId: number): FolderShareLinkRecord | undefined {
+    const revokedAt = nowIso();
+    database
+      .prepare(
+        `
+        UPDATE folder_share_links
+        SET revoked_at = COALESCE(revoked_at, ?)
+        WHERE id = ? AND folder_id = ?
+        `
+      )
+      .run(revokedAt, id, folderId);
+
+    return this.getById(id);
+  },
+
+  touchLastUsed(id: number): void {
+    database.prepare('UPDATE folder_share_links SET last_used_at = ? WHERE id = ?').run(nowIso(), id);
+  }
+};
+
+export const folderSharePasswordRepository = {
+  get(folderId: number): FolderSharePasswordRecord | undefined {
+    return database
+      .prepare('SELECT * FROM folder_share_passwords WHERE folder_id = ?')
+      .get(folderId) as FolderSharePasswordRecord | undefined;
+  },
+
+  upsert(input: UpsertFolderSharePasswordInput): FolderSharePasswordRecord {
+    database.exec('BEGIN TRANSACTION;');
+    try {
+      database.prepare('UPDATE folders SET share_password_version = share_password_version + 1 WHERE id = ?').run(input.folderId);
+      const folder = database.prepare('SELECT share_password_version FROM folders WHERE id = ?').get(input.folderId) as { share_password_version: number } | undefined;
+      const version = folder ? folder.share_password_version : 1;
+
+      database
+        .prepare(
+          `
+          INSERT INTO folder_share_passwords (
+            folder_id,
+            password_hash,
+            password_salt,
+            version,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(folder_id) DO UPDATE SET
+            password_hash = excluded.password_hash,
+            password_salt = excluded.password_salt,
+            version = excluded.version,
+            updated_at = excluded.updated_at
+          `
+        )
+        .run(input.folderId, input.passwordHash, input.passwordSalt, version, nowIso());
+
+      database.exec('COMMIT;');
+      return this.get(input.folderId) as FolderSharePasswordRecord;
+    } catch (error) {
+      database.exec('ROLLBACK;');
+      throw error;
+    }
+  },
+
+  remove(folderId: number): boolean {
+    database.exec('BEGIN TRANSACTION;');
+    try {
+      database.prepare('UPDATE folders SET share_password_version = share_password_version + 1 WHERE id = ?').run(folderId);
+      const result = database.prepare('DELETE FROM folder_share_passwords WHERE folder_id = ?').run(folderId);
+      database.exec('COMMIT;');
+      return Number(result.changes ?? 0) > 0;
+    } catch (error) {
+      database.exec('ROLLBACK;');
+      throw error;
+    }
+  }
+};
+
 export const collectionConstants = {
   defaultCollectionSlug: DEFAULT_COLLECTION_SLUG,
   defaultCollectionName: DEFAULT_COLLECTION_NAME
@@ -2348,10 +2498,13 @@ export const maintenanceRepository = {
       BEGIN;
       UPDATE folders SET avatar_image_id = NULL;
       DELETE FROM likes;
+      DELETE FROM folder_share_passwords;
+      DELETE FROM folder_share_links;
       DELETE FROM images;
       DELETE FROM folders;
       DELETE FROM folder_scan_state;
       DELETE FROM scan_runs;
+      DELETE FROM app_settings WHERE key = '${SHARE_SESSION_SECRET_SETTING_KEY}';
       DELETE FROM sqlite_sequence WHERE name IN ('folders', 'images', 'scan_runs');
       COMMIT;
     `);

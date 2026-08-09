@@ -28,7 +28,7 @@ When enabled:
 - Foldergram stores one-way password hashes, salts, and session metadata in SQLite `app_settings`
 - the browser unlocks access with a signed `HttpOnly` session cookie
 - the session payload carries the current role (`admin` or `viewer`)
-- `/api` routes require that session, except for `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/unlock-admin`, and `POST /api/auth/logout`
+- `/api` routes require that session, except for `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/unlock-admin`, `POST /api/auth/logout`, and the scoped `/api/share/...` routes
 - generated media under `/thumbnails` and `/previews` also require that session unless public viewer mode is enabled
 - in `viewer_access_mode=public`, safe read routes and generated media can be browsed anonymously
 - anonymous public favorites stay in the browser and never write into SQLite likes
@@ -39,6 +39,44 @@ When enabled:
 Changing either stored password or the viewer-access mode rotates the session
 version, which invalidates older sessions. Disabling password protection clears
 the stored auth settings.
+
+## Folder shares
+
+Folder shares are narrower than viewer sessions. They grant read-only access to
+one folder through `/share/:slug` and do not unlock Home, feed search, Reels,
+Places, Likes, Collections, Trash, Settings, scans, rebuilds, captions, cover
+editing, delete actions, or original-file downloads.
+
+Admins can create:
+
+- expiring folder links
+- unlimited folder links that can still be revoked
+- reusable per-folder passwords
+
+Share links and folder passwords are independent grants rather than layers of
+the same grant. Visitors with an active link do not also need the folder
+password. Revoking a link invalidates that link and its session, but visitors
+who know the reusable folder password can still create a password session. To
+remove both access paths, revoke the applicable links and change or remove the
+folder password.
+
+For share links:
+
+- the raw token is generated once and returned only in the creation response
+- the share URL places the raw token in the URL fragment as `#token=...`
+- SQLite stores only a SHA-256 token hash plus a short token prefix
+- expired and revoked links stop creating or validating share sessions
+
+After a visitor unlocks a share, Foldergram sets a separate signed `HttpOnly`
+cookie named `foldergram_share_session`. That cookie is not an admin or viewer
+session. The server re-checks the underlying link or folder-password version
+before granting folder access, so revoking a link, expiring a link, changing a
+folder password, or removing a folder password invalidates older share grants.
+
+Shared media does not use raw `/thumbnails/...` or `/previews/...` URLs in API
+payloads. Shared folder payloads point to `/api/share/images/:id/thumbnail` and
+`/api/share/images/:id/preview`, and those routes check that the request has a
+grant for the image's folder before serving or lazily generating the derivative.
 
 ## Mutation protection
 
@@ -127,6 +165,7 @@ This is a resilience measure, not a security feature.
 Foldergram includes small in-memory rate limiters for:
 
 - authentication attempts
+- folder share token and password unlock attempts
 - admin mutation routes such as rescan and rebuild operations
 
 These limiters are process-local and intentionally simple. They are useful for

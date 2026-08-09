@@ -1,7 +1,23 @@
 import { defineStore } from 'pinia';
 
-import { fetchFolderImages, fetchFolders, updateFolderProfile, setFolderCover } from '../api/gallery';
-import type { FeedItem, FolderSummary } from '../types/api';
+import {
+  createFolderShareLink,
+  fetchFolderImages,
+  fetchFolderShareLinks,
+  fetchFolders,
+  removeFolderSharePassword,
+  revokeFolderShareLink,
+  setFolderCover,
+  setFolderSharePassword,
+  updateFolderProfile
+} from '../api/gallery';
+import type {
+  CreateFolderShareLinkInput,
+  FeedItem,
+  FolderShareLink,
+  FolderSharePasswordStatus,
+  FolderSummary
+} from '../types/api';
 import { updateCaptionInItems } from '../utils/caption';
 
 type FolderMediaFilter = 'all' | 'video';
@@ -19,6 +35,13 @@ interface FoldersState {
   currentHasMore: boolean;
   loadingFolder: boolean;
   folderError: string | null;
+  shareLinks: FolderShareLink[];
+  sharePassword: FolderSharePasswordStatus;
+  sharePublicFolderUrl: string | null;
+  sharePublicAccess: boolean;
+  loadingShare: boolean;
+  shareError: string | null;
+  lastCreatedShareUrl: string | null;
 }
 
 export const useFoldersStore = defineStore('folders', {
@@ -34,7 +57,17 @@ export const useFoldersStore = defineStore('folders', {
     currentLimit: 24,
     currentHasMore: true,
     loadingFolder: false,
-    folderError: null
+    folderError: null,
+    shareLinks: [],
+    sharePassword: {
+      enabled: false,
+      updatedAt: null
+    },
+    sharePublicFolderUrl: null,
+    sharePublicAccess: false,
+    loadingShare: false,
+    shareError: null,
+    lastCreatedShareUrl: null
   }),
   actions: {
     removeImage(imageId: number, folderSlug: string, mediaType: FeedItem['mediaType'] = 'image') {
@@ -109,6 +142,16 @@ export const useFoldersStore = defineStore('folders', {
       this.currentHasMore = true;
       this.loadingFolder = false;
       this.folderError = null;
+      this.shareLinks = [];
+      this.sharePassword = {
+        enabled: false,
+        updatedAt: null
+      };
+      this.sharePublicFolderUrl = null;
+      this.sharePublicAccess = false;
+      this.loadingShare = false;
+      this.shareError = null;
+      this.lastCreatedShareUrl = null;
     },
 
     async fetchFolders(force = false) {
@@ -187,6 +230,90 @@ export const useFoldersStore = defineStore('folders', {
       if (this.currentFolder?.slug === slug) {
         const payload = await fetchFolderImages(slug, 1, this.currentLimit, this.currentFilter === 'video' ? 'video' : undefined);
         this.currentFolder = payload.folder;
+      }
+    },
+
+    async loadShareLinks(slug: string) {
+      this.loadingShare = true;
+      this.shareError = null;
+      this.lastCreatedShareUrl = null;
+
+      try {
+        const payload = await fetchFolderShareLinks(slug);
+        this.shareLinks = payload.links;
+        this.sharePassword = payload.password;
+        this.sharePublicFolderUrl = payload.publicFolderUrl;
+        this.sharePublicAccess = payload.publicAccess;
+      } catch (error) {
+        this.shareError = error instanceof Error ? error.message : 'Unable to load folder sharing';
+        throw error;
+      } finally {
+        this.loadingShare = false;
+      }
+    },
+
+    async createShareLink(slug: string, input: CreateFolderShareLinkInput) {
+      this.loadingShare = true;
+      this.shareError = null;
+
+      try {
+        const payload = await createFolderShareLink(slug, input);
+        this.shareLinks = [payload.link, ...this.shareLinks.filter((link) => link.id !== payload.link.id)];
+        this.lastCreatedShareUrl = payload.shareUrl;
+        return payload;
+      } catch (error) {
+        this.shareError = error instanceof Error ? error.message : 'Unable to create share link';
+        throw error;
+      } finally {
+        this.loadingShare = false;
+      }
+    },
+
+    async revokeShareLink(slug: string, linkId: number) {
+      this.loadingShare = true;
+      this.shareError = null;
+
+      try {
+        const payload = await revokeFolderShareLink(slug, linkId);
+        this.shareLinks = this.shareLinks.map((link) => (link.id === payload.link.id ? payload.link : link));
+        if (this.lastCreatedShareUrl) {
+          this.lastCreatedShareUrl = null;
+        }
+      } catch (error) {
+        this.shareError = error instanceof Error ? error.message : 'Unable to revoke share link';
+        throw error;
+      } finally {
+        this.loadingShare = false;
+      }
+    },
+
+    async setSharePassword(slug: string, password: string) {
+      this.loadingShare = true;
+      this.shareError = null;
+
+      try {
+        const payload = await setFolderSharePassword(slug, password);
+        this.sharePassword = payload.password;
+      } catch (error) {
+        this.shareError = error instanceof Error ? error.message : 'Unable to save folder password';
+        throw error;
+      } finally {
+        this.loadingShare = false;
+      }
+    },
+
+    async removeSharePassword(slug: string) {
+      this.loadingShare = true;
+      this.shareError = null;
+
+      try {
+        const payload = await removeFolderSharePassword(slug);
+        this.sharePassword = payload.password;
+      } catch (error) {
+        this.shareError = error instanceof Error ? error.message : 'Unable to remove folder password';
+        throw error;
+      } finally {
+        this.loadingShare = false;
       }
     }
   }

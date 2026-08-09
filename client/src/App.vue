@@ -10,6 +10,7 @@
       <p class="m-0 text-muted">{{ t('app.authLoading.description') }}</p>
     </div>
   </section>
+  <RouterView v-else-if="isPublicShareRoute" />
   <AuthGate v-else-if="authStore.requiresLogin" />
   <AppShell v-else>
     <RouterView :route="displayRoute" />
@@ -28,7 +29,7 @@ import { RouterView, useRoute, useRouter, type RouteLocationNormalizedLoaded } f
 import AppShell from './components/AppShell.vue';
 import AdminUnlockDialog from './components/AdminUnlockDialog.vue';
 import AuthGate from './components/AuthGate.vue';
-import { canAccessRoute } from './router';
+import { canAccessRoute, routeAllowsPublicShareAccess } from './router';
 import PostView from './views/PostView.vue';
 import { useAppStore } from './stores/app';
 import { useAuthStore } from './stores/auth';
@@ -93,6 +94,7 @@ const modalBackgroundRoute = computed<RouteLocationNormalizedLoaded | null>(() =
 const showImageModal = computed(
   () => route.name === 'image' && modalBackgroundRoute.value !== null && modalBackgroundRoute.value.fullPath !== route.fullPath
 );
+const isPublicShareRoute = computed(() => routeAllowsPublicShareAccess(route));
 const displayRoute = computed<RouteLocationNormalizedLoaded | undefined>(() =>
   showImageModal.value ? modalBackgroundRoute.value ?? undefined : route
 );

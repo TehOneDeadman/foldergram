@@ -2,6 +2,7 @@
   "common": {
     "cancel": "Cancelar",
     "close": "Cerrar",
+    "copy": "Copiar",
     "description": "Descripción",
     "loadMore": "Cargar más",
     "loadingMore": "Cargando más...",
@@ -673,6 +674,7 @@
       "openStories": "Abrir stories de la carpeta",
       "openAvatar": "Abrir avatar de la carpeta",
       "editButton": "Editar carpeta de la app",
+      "shareButton": "Compartir carpeta",
       "posts": "{count} publicaciones",
       "reels": "{count} reels",
       "updated": "{date} actualizado",
@@ -691,11 +693,89 @@
         "nameRequired": "El nombre es obligatorio."
       }
     },
+    "shareModal": {
+      "title": "Compartir carpeta",
+      "publicUrl": "URL pública de la carpeta",
+      "accessSummaryTitle": "Acceso actual",
+      "accessSummaryBoth": "Enlaces activos: {count}. Acceso con contraseña: habilitado.",
+      "accessSummaryLinks": "Enlaces activos: {count}. Acceso con contraseña: desactivado.",
+      "accessSummaryPassword": "Enlaces activos: 0. Acceso con contraseña: habilitado.",
+      "accessSummaryNone": "Enlaces activos: 0. Acceso con contraseña: desactivado.",
+      "independentMethods": "Los enlaces y el acceso con contraseña funcionan de forma independiente. Puedes habilitar uno o ambos.",
+      "linkSection": "Enlaces compartidos",
+      "linkDescription": "Cualquiera que tenga un enlace activo puede abrir esta carpeta sin contraseña. Cada enlace caduca o puede revocarse de forma independiente.",
+      "activeLinks": "{count} activos",
+      "expiration": "Caducidad del enlace",
+      "customExpiration": "Caducidad personalizada",
+      "createLink": "Crear enlace",
+      "creating": "Creando...",
+      "createdLink": "Copia este enlace ahora",
+      "revoke": "Revocar",
+      "noLinks": "Todavía no hay enlaces compartidos.",
+      "passwordSection": "Acceso con contraseña",
+      "passwordDescription": "Cualquiera que tenga la dirección de la carpeta y la contraseña puede abrirla. Esto no protege los enlaces compartidos con contraseña.",
+      "passwordEnabled": "Activada",
+      "passwordOff": "Desactivada",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Mínimo 8 caracteres",
+      "setPassword": "Establecer contraseña",
+      "changePassword": "Cambiar contraseña",
+      "removePassword": "Quitar contraseña",
+      "copyPasswordUrl": "Copiar dirección de la carpeta",
+      "passwordSharingHint": "Envía la dirección de la carpeta y la contraseña por separado.",
+      "neverExpires": "No caduca",
+      "expiresAt": "Caduca {date}",
+      "linkMeta": "Prefijo del token {prefix}. Creado {date}.",
+      "presets": {
+        "oneHour": "1 hora",
+        "day": "24 horas",
+        "week": "7 días",
+        "custom": "Personalizada",
+        "unlimited": "Sin caducidad"
+      },
+      "status": {
+        "active": "Activo",
+        "expired": "Caducado",
+        "revoked": "Revocado"
+      },
+      "notices": {
+        "linkCreated": "Enlace creado. Se abre sin contraseña hasta que caduque o sea revocado.",
+        "linkRevoked": "Enlace compartido revocado.",
+        "linkRevokedWithPassword": "Enlace compartido revocado. El acceso con contraseña sigue habilitado.",
+        "passwordEnabled": "Acceso con contraseña habilitado.",
+        "passwordEnabledWithLinks": "Acceso con contraseña habilitado. Los enlaces existentes siguen funcionando sin contraseña.",
+        "passwordRemoved": "Acceso con contraseña eliminado.",
+        "passwordRemovedWithLinks": "Acceso con contraseña eliminado. Los enlaces activos siguen funcionando."
+      },
+      "errors": {
+        "createLink": "No se pudo crear el enlace.",
+        "savePassword": "No se pudo guardar la contraseña de la carpeta.",
+        "revokeLink": "No se pudo revocar el enlace compartido.",
+        "removePassword": "No se pudo eliminar el acceso con contraseña."
+      }
+    },
     "tabs": {
       "posts": "Publicaciones",
       "reels": "Reels",
       "sections": "Secciones de carpeta"
     }
+  },
+  "share": {
+    "loadingEyebrow": "Carpeta compartida",
+    "loadingTitle": "Abriendo carpeta compartida",
+    "passwordEyebrow": "Carpeta compartida",
+    "passwordTitle": "Introduce la contraseña de la carpeta",
+    "passwordDescription": "Introduce la contraseña reutilizable de la carpeta para continuar.",
+    "passwordFallbackDescription": "Este enlace compartido ya no está disponible. Si conoces la contraseña de la carpeta, todavía puedes acceder a ella.",
+    "passwordLabel": "Contraseña",
+    "unlocking": "Desbloqueando...",
+    "unlock": "Desbloquear carpeta",
+    "expiredTitle": "Este enlace compartido no está disponible",
+    "expiredDescription": "El enlace puede estar caducado, revocado o sin token.",
+    "errorTitle": "No se pudo abrir la carpeta compartida",
+    "errorDescription": "No se pudo cargar esta carpeta compartida.",
+    "backToFolder": "Volver a la carpeta compartida",
+    "postErrorTitle": "No se pudo cargar la publicación compartida"
   },
   "reels": {
     "view": {

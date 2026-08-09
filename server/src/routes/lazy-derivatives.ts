@@ -5,11 +5,12 @@ import pLimit from 'p-limit';
 
 import { appConfig } from '../config/env.js';
 import { imageRepository } from '../db/repositories.js';
+import type { ImageRecord } from '../types/models.js';
 import { log } from '../services/log-service.js';
 import { generatePreviewDerivative, generateThumbnailDerivative } from '../services/derivative-service.js';
 import { scannerService } from '../services/scanner-service.js';
 import { resolveOriginalPath } from '../utils/media-paths.js';
-import { applyDerivativeErrorHeaders, applyProtectedMediaHeaders } from '../utils/media-response.js';
+import { applyDerivativeErrorHeaders, applyNoStoreMediaHeaders, applyProtectedMediaHeaders } from '../utils/media-response.js';
 import { normalizePath, safeJoin } from '../utils/path-utils.js';
 
 // In-memory map to deduplicate concurrent generation requests for the same derivative path.
@@ -43,8 +44,16 @@ function isConnectionTerminationError(error: unknown): boolean {
   return code === 'ECONNABORTED' || code === 'ECONNRESET' || code === 'ERR_STREAM_PREMATURE_CLOSE';
 }
 
-function sendDerivativeFile(response: express.Response, absolutePath: string): Promise<SendDerivativeResult> {
-  applyProtectedMediaHeaders(response);
+function sendDerivativeFile(
+  response: express.Response,
+  absolutePath: string,
+  options?: { noStore?: boolean }
+): Promise<SendDerivativeResult> {
+  if (options?.noStore) {
+    applyNoStoreMediaHeaders(response);
+  } else {
+    applyProtectedMediaHeaders(response);
+  }
 
   return new Promise((resolve, reject) => {
     response.sendFile(absolutePath, (error) => {
@@ -174,6 +183,106 @@ async function serveOrGenerate(
 
   try {
     const result = await sendDerivativeFile(response, absoluteOutputPath);
+    if (result === 'aborted') {
+      return;
+    }
+  } catch {
+    if (response.headersSent) {
+      return;
+    }
+
+    applyDerivativeErrorHeaders(response);
+    response.status(500).json({ message: 'Failed to serve derivative.' });
+  }
+}
+
+export async function serveDerivativeForImage(
+  response: express.Response,
+  imageRecord: ImageRecord,
+  kind: 'thumbnail' | 'preview',
+  options?: { noStore?: boolean }
+): Promise<void> {
+  const requestedPath = kind === 'thumbnail' ? imageRecord.thumbnail_path : imageRecord.preview_path;
+  const rootDir = kind === 'thumbnail' ? appConfig.thumbnailsDir : appConfig.previewsDir;
+  const absoluteOutputPath = resolveDerivativePath(rootDir, requestedPath);
+  if (!absoluteOutputPath) {
+    applyDerivativeErrorHeaders(response);
+    response.status(400).json({ message: 'Invalid derivative path.' });
+    return;
+  }
+
+  try {
+    await fs.access(absoluteOutputPath);
+    try {
+      const result = await sendDerivativeFile(response, absoluteOutputPath, options);
+      if (result === 'aborted') {
+        return;
+      }
+    } catch {
+      if (response.headersSent) {
+        return;
+      }
+
+      applyDerivativeErrorHeaders(response);
+      response.status(500).json({ message: 'Failed to serve derivative.' });
+    }
+    return;
+  } catch {
+    // File does not exist — fall through to generation.
+  }
+
+  if (scannerService.isLibraryRebuildRequired()) {
+    applyDerivativeErrorHeaders(response);
+    response.status(409).json({ message: 'Library rebuild required before generating derivatives.' });
+    return;
+  }
+
+  let generationPromise = inflightGenerations.get(absoluteOutputPath);
+
+  if (!generationPromise) {
+    log.info('Lazy derivative generate', {
+      kind,
+      file: requestedPath,
+      source: imageRecord.relative_path
+    });
+
+    generationPromise = generationLimit(async () => {
+      try {
+        const sourcePath = resolveOriginalPath(imageRecord.relative_path);
+
+        if (kind === 'thumbnail') {
+          await generateThumbnailDerivative(sourcePath, imageRecord.relative_path, false, {
+            thumbnailPath: imageRecord.thumbnail_path
+          });
+          return;
+        }
+
+        await generatePreviewDerivative(sourcePath, imageRecord.relative_path, false, {
+          previewPath: imageRecord.preview_path
+        });
+      } finally {
+        inflightGenerations.delete(absoluteOutputPath);
+      }
+    });
+
+    inflightGenerations.set(absoluteOutputPath, generationPromise);
+  }
+
+  try {
+    await generationPromise;
+  } catch (error) {
+    if (response.headersSent) {
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : 'Failed to generate derivative.';
+    applyDerivativeErrorHeaders(response);
+    response.status(500).json({ message });
+    return;
+  }
+
+  try {
+    const result = await sendDerivativeFile(response, absoluteOutputPath, options);
     if (result === 'aborted') {
       return;
     }

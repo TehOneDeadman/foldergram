@@ -2,6 +2,7 @@
   "common": {
     "cancel": "取消",
     "close": "关闭",
+    "copy": "复制",
     "description": "描述",
     "loadMore": "加载更多",
     "loadingMore": "正在加载更多...",
@@ -673,6 +674,7 @@
       "openStories": "打开文件夹 stories",
       "openAvatar": "打开文件夹头像",
       "editButton": "编辑应用文件夹",
+      "shareButton": "共享文件夹",
       "posts": "{count} 个帖子",
       "reels": "{count} 条短片",
       "updated": "{date} 已更新",
@@ -691,11 +693,89 @@
         "nameRequired": "名称为必填项。"
       }
     },
+    "shareModal": {
+      "title": "共享文件夹",
+      "publicUrl": "公开文件夹 URL",
+      "accessSummaryTitle": "当前访问方式",
+      "accessSummaryBoth": "有效共享链接：{count}。密码访问：已启用。",
+      "accessSummaryLinks": "有效共享链接：{count}。密码访问：已关闭。",
+      "accessSummaryPassword": "有效共享链接：0。密码访问：已启用。",
+      "accessSummaryNone": "有效共享链接：0。密码访问：已关闭。",
+      "independentMethods": "共享链接和密码访问彼此独立。你可以启用其中一种或同时启用两种。",
+      "linkSection": "共享链接",
+      "linkDescription": "任何拥有有效链接的人无需密码即可打开此文件夹。每个链接会独立过期，也可单独撤销。",
+      "activeLinks": "{count} 个有效",
+      "expiration": "共享链接过期时间",
+      "customExpiration": "自定义过期时间",
+      "createLink": "创建链接",
+      "creating": "正在创建...",
+      "createdLink": "现在复制此链接",
+      "revoke": "撤销",
+      "noLinks": "还没有共享链接。",
+      "passwordSection": "密码访问",
+      "passwordDescription": "任何拥有文件夹地址和密码的人都可以打开它。这不会为共享链接添加密码保护。",
+      "passwordEnabled": "已启用",
+      "passwordOff": "已关闭",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "至少 8 个字符",
+      "setPassword": "设置密码",
+      "changePassword": "更改密码",
+      "removePassword": "移除密码",
+      "copyPasswordUrl": "复制文件夹地址",
+      "passwordSharingHint": "请分别发送文件夹地址和密码。",
+      "neverExpires": "永不过期",
+      "expiresAt": "{date} 过期",
+      "linkMeta": "令牌前缀 {prefix}。创建于 {date}。",
+      "presets": {
+        "oneHour": "1 小时",
+        "day": "24 小时",
+        "week": "7 天",
+        "custom": "自定义",
+        "unlimited": "不过期"
+      },
+      "status": {
+        "active": "有效",
+        "expired": "已过期",
+        "revoked": "已撤销"
+      },
+      "notices": {
+        "linkCreated": "共享链接已创建。在过期或撤销之前，该链接无需密码即可打开。",
+        "linkRevoked": "共享链接已撤销。",
+        "linkRevokedWithPassword": "共享链接已撤销。密码访问仍然启用。",
+        "passwordEnabled": "密码访问已启用。",
+        "passwordEnabledWithLinks": "密码访问已启用。现有共享链接仍无需密码即可使用。",
+        "passwordRemoved": "密码访问已移除。",
+        "passwordRemovedWithLinks": "密码访问已移除。有效共享链接仍可使用。"
+      },
+      "errors": {
+        "createLink": "无法创建共享链接。",
+        "savePassword": "无法保存文件夹密码。",
+        "revokeLink": "无法撤销共享链接。",
+        "removePassword": "无法移除密码访问。"
+      }
+    },
     "tabs": {
       "posts": "帖子",
       "reels": "短片",
       "sections": "文件夹分区"
     }
+  },
+  "share": {
+    "loadingEyebrow": "文件夹共享",
+    "loadingTitle": "正在打开共享文件夹",
+    "passwordEyebrow": "文件夹共享",
+    "passwordTitle": "输入文件夹密码",
+    "passwordDescription": "输入可重复使用的文件夹密码以继续。",
+    "passwordFallbackDescription": "此共享链接已不可用。如果你知道文件夹密码，仍可访问此文件夹。",
+    "passwordLabel": "密码",
+    "unlocking": "正在解锁...",
+    "unlock": "解锁文件夹",
+    "expiredTitle": "此共享链接不可用",
+    "expiredDescription": "此链接可能已过期、已撤销或缺少令牌。",
+    "errorTitle": "无法打开文件夹共享",
+    "errorDescription": "无法加载此文件夹共享。",
+    "backToFolder": "返回共享文件夹",
+    "postErrorTitle": "无法加载共享帖子"
   },
   "reels": {
     "view": {

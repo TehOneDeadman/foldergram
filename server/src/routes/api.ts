@@ -2,12 +2,18 @@ import express from 'express';
 import { z } from 'zod';
 
 import { AUTH_PASSWORD_MAX_LENGTH, AUTH_PASSWORD_MIN_LENGTH, authService } from '../services/auth-service.js';
+import {
+  FOLDER_SHARE_PASSWORD_MAX_LENGTH,
+  FOLDER_SHARE_PASSWORD_MIN_LENGTH,
+  folderShareService
+} from '../services/folder-share-service.js';
 import { galleryService } from '../services/gallery-service.js';
 import { requireCapability } from '../middleware/auth-protection.js';
 import { createRateLimiter } from '../middleware/rate-limit.js';
 import { LIBRARY_REBUILD_REQUIRED_MESSAGE, scannerService } from '../services/scanner-service.js';
 import { storageService } from '../services/storage-service.js';
 import { watcherService } from '../services/watcher-service.js';
+import { serveDerivativeForImage } from './lazy-derivatives.js';
 
 const router = express.Router();
 
@@ -103,6 +109,9 @@ const storyIdSchema = z.object({
 const imageIdSchema = z.object({
   id: z.coerce.number().int().positive()
 });
+const shareLinkIdSchema = z.object({
+  linkId: z.coerce.number().int().positive()
+});
 
 export const patchFolderBodySchema = z.object({
   name: z.string().min(1).max(255),
@@ -164,6 +173,50 @@ const viewerAccessBodySchema = z
       });
     }
   });
+const createShareLinkBodySchema = z
+  .object({
+    expiresIn: z.enum(['1h', '24h', '7d', 'custom', 'unlimited']).default('24h'),
+    customExpiresAt: z.string().datetime().nullable().optional(),
+    unlimited: z.boolean().default(false)
+  })
+  .superRefine((body, context) => {
+    if (body.unlimited || body.expiresIn === 'unlimited') {
+      return;
+    }
+
+    if (body.expiresIn === 'custom' && !body.customExpiresAt) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Custom expiration date is required.',
+        path: ['customExpiresAt']
+      });
+      return;
+    }
+
+    if (body.customExpiresAt && Date.parse(body.customExpiresAt) <= Date.now()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Share links must expire in the future.',
+        path: ['customExpiresAt']
+      });
+    }
+  });
+const shareTokenBodySchema = z.object({
+  token: z.string().trim().min(1).max(512)
+});
+const sharePasswordBodySchema = z.object({
+  password: z
+    .string()
+    .min(FOLDER_SHARE_PASSWORD_MIN_LENGTH, `Password must be at least ${FOLDER_SHARE_PASSWORD_MIN_LENGTH} characters.`)
+    .max(FOLDER_SHARE_PASSWORD_MAX_LENGTH, `Password must be at most ${FOLDER_SHARE_PASSWORD_MAX_LENGTH} characters.`)
+    .refine((value) => value.trim().length > 0, 'Password cannot be empty.')
+});
+const submittedSharePasswordBodySchema = z.object({
+  password: z
+    .string()
+    .min(1, 'Password is required.')
+    .max(FOLDER_SHARE_PASSWORD_MAX_LENGTH, `Password must be at most ${FOLDER_SHARE_PASSWORD_MAX_LENGTH} characters.`)
+});
 
 export const authRequestBodySchemas = {
   login: loginBodySchema,
@@ -195,6 +248,50 @@ const authRateLimiter = createRateLimiter({
   max: 10,
   message: 'Too many authentication attempts. Please try again in a minute.'
 });
+const shareUnlockRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: 'Too many share unlock attempts. Please try again in a minute.'
+});
+
+function resolveShareLinkExpiration(body: z.infer<typeof createShareLinkBodySchema>): Date | null {
+  if (body.unlimited || body.expiresIn === 'unlimited') {
+    return null;
+  }
+
+  if (body.expiresIn === 'custom') {
+    return new Date(body.customExpiresAt as string);
+  }
+
+  const durationMs =
+    body.expiresIn === '1h'
+      ? 60 * 60 * 1000
+      : body.expiresIn === '7d'
+        ? 7 * 24 * 60 * 60 * 1000
+        : 24 * 60 * 60 * 1000;
+
+  return new Date(Date.now() + durationMs);
+}
+
+function setShareResponseHeaders(response: express.Response): void {
+  response.setHeader('Cache-Control', 'private, no-store');
+  response.vary('Cookie');
+}
+
+function sendShareAccessDenied(response: express.Response, status = 401): void {
+  setShareResponseHeaders(response);
+  response.status(status).json({ message: 'This folder share is expired, revoked, or locked.' });
+}
+
+function ensureShareFolderAccess(request: express.Request, response: express.Response, folderId: number): boolean {
+  if (!folderShareService.getFolderGrant(request, folderId)) {
+    sendShareAccessDenied(response);
+    return false;
+  }
+
+  setShareResponseHeaders(response);
+  return true;
+}
 
 router.get('/health', (_request, response) => {
   const storageState = storageService.getState();
@@ -511,6 +608,114 @@ router.post('/folders/:slug/cover', requireCapability('canManageLibrary', 'Admin
   response.json({ ok: true });
 });
 
+router.get(
+  '/admin/folders/:slug/share-links',
+  requireCapability('canManageLibrary', 'Admin access is required.'),
+  (request, response) => {
+    const params = slugSchema.parse(request.params);
+    const payload = folderShareService.listLinks(params.slug);
+
+    if (!payload) {
+      response.status(404).json({ message: 'Folder not found' });
+      return;
+    }
+
+    response.json({
+      links: payload.links,
+      password: payload.password,
+      publicFolderUrl: `/folders/${encodeURIComponent(payload.folder.slug)}`,
+      publicAccess: !authService.isEnabled() || authService.isPublicViewerAccessEnabled()
+    });
+  }
+);
+
+router.post(
+  '/admin/folders/:slug/share-links',
+  requireCapability('canManageLibrary', 'Admin access is required.'),
+  (request, response) => {
+    const params = slugSchema.parse(request.params);
+    const body = createShareLinkBodySchema.parse(request.body);
+    const created = folderShareService.createLink(params.slug, {
+      expiresAt: resolveShareLinkExpiration(body)
+    });
+
+    if (!created) {
+      response.status(404).json({ message: 'Folder not found' });
+      return;
+    }
+
+    response.status(201).json({
+      ok: true,
+      shareUrl: `/share/${encodeURIComponent(created.folder.slug)}#token=${encodeURIComponent(created.rawToken)}`,
+      link: created.link
+    });
+  }
+);
+
+router.delete(
+  '/admin/folders/:slug/share-links/:linkId',
+  requireCapability('canManageLibrary', 'Admin access is required.'),
+  (request, response) => {
+    const params = slugSchema.merge(shareLinkIdSchema).parse(request.params);
+    const link = folderShareService.revokeLink(params.slug, params.linkId);
+
+    if (!link) {
+      response.status(404).json({ message: 'Share link not found' });
+      return;
+    }
+
+    response.json({
+      ok: true,
+      link
+    });
+  }
+);
+
+router.put(
+  '/admin/folders/:slug/share-password',
+  requireCapability('canManageLibrary', 'Admin access is required.'),
+  (request, response) => {
+    const params = slugSchema.parse(request.params);
+    const body = sharePasswordBodySchema.parse(request.body);
+    const password = folderShareService.setPassword(params.slug, body.password);
+
+    if (!password) {
+      response.status(404).json({ message: 'Folder not found' });
+      return;
+    }
+
+    response.json({
+      ok: true,
+      password: {
+        enabled: password.enabled,
+        updatedAt: password.updatedAt
+      }
+    });
+  }
+);
+
+router.delete(
+  '/admin/folders/:slug/share-password',
+  requireCapability('canManageLibrary', 'Admin access is required.'),
+  (request, response) => {
+    const params = slugSchema.parse(request.params);
+    const password = folderShareService.removePassword(params.slug);
+
+    if (!password) {
+      response.status(404).json({ message: 'Folder not found' });
+      return;
+    }
+
+    response.json({
+      ok: true,
+      password: {
+        enabled: false,
+        updatedAt: null
+      }
+    });
+  }
+);
+
 router.delete('/folders/:slug', requireCapability('canDeleteMedia', 'Admin access is required.'), async (request, response) => {
   const params = slugSchema.parse(request.params);
   const query = deleteFolderQuerySchema.parse(request.query);
@@ -540,6 +745,133 @@ router.get('/folders/:slug/images', (request, response) => {
   }
 
   response.json(payload);
+});
+
+router.get('/share/folders/:slug/access', (request, response) => {
+  const params = slugSchema.parse(request.params);
+  const access = folderShareService.getAccessState(request, params.slug);
+
+  if (!access.exists) {
+    response.status(404).json({ message: 'Folder share not found' });
+    return;
+  }
+
+  setShareResponseHeaders(response);
+  response.json(access);
+});
+
+router.post('/share/folders/:slug/unlock-link', shareUnlockRateLimiter, (request, response) => {
+  const params = slugSchema.parse(request.params);
+  const body = shareTokenBodySchema.parse(request.body);
+  const grant = folderShareService.verifyLinkToken(params.slug, body.token);
+
+  if (!grant) {
+    folderShareService.clearShareSession(response, request);
+    sendShareAccessDenied(response, 403);
+    return;
+  }
+
+  folderShareService.setShareSession(response, request, grant);
+  setShareResponseHeaders(response);
+  response.json({ ok: true });
+});
+
+router.post('/share/folders/:slug/unlock-password', shareUnlockRateLimiter, (request, response) => {
+  const params = slugSchema.parse(request.params);
+  const body = submittedSharePasswordBodySchema.parse(request.body);
+  const grant = folderShareService.verifyPassword(params.slug, body.password);
+
+  if (!grant) {
+    folderShareService.clearShareSession(response, request);
+    sendShareAccessDenied(response);
+    return;
+  }
+
+  folderShareService.setShareSession(response, request, grant);
+  setShareResponseHeaders(response);
+  response.json({ ok: true });
+});
+
+router.get('/share/folders/:slug', (request, response) => {
+  const params = slugSchema.parse(request.params);
+  const folder = galleryService.getSharedFolderBySlug(params.slug);
+
+  if (!folder) {
+    response.status(404).json({ message: 'Folder share not found' });
+    return;
+  }
+
+  if (!ensureShareFolderAccess(request, response, folder.id)) {
+    return;
+  }
+
+  response.json(folder);
+});
+
+router.get('/share/folders/:slug/images', (request, response) => {
+  const params = slugSchema.parse(request.params);
+  const query = paginationQuerySchema.merge(mediaTypeQuerySchema).parse(request.query);
+  const payload = galleryService.getSharedFolderImages(params.slug, query.page, query.limit, query.mediaType);
+
+  if (!payload) {
+    response.status(404).json({ message: 'Folder share not found' });
+    return;
+  }
+
+  if (!ensureShareFolderAccess(request, response, payload.folder.id)) {
+    return;
+  }
+
+  response.json(payload);
+});
+
+router.get('/share/images/:id', (request, response) => {
+  const params = imageIdSchema.parse(request.params);
+  const query = mediaTypeQuerySchema.parse(request.query);
+  const image = galleryService.getSharedImageDetail(params.id, query.mediaType);
+
+  if (!image) {
+    response.status(404).json({ message: 'Post not found' });
+    return;
+  }
+
+  if (!ensureShareFolderAccess(request, response, image.folderId)) {
+    return;
+  }
+
+  response.json(image);
+});
+
+router.get('/share/images/:id/thumbnail', async (request, response) => {
+  const params = imageIdSchema.parse(request.params);
+  const image = galleryService.getShareDerivativeImage(params.id);
+
+  if (!image) {
+    response.status(404).json({ message: 'Thumbnail not found' });
+    return;
+  }
+
+  if (!ensureShareFolderAccess(request, response, image.folder_id)) {
+    return;
+  }
+
+  await serveDerivativeForImage(response, image, 'thumbnail', { noStore: true });
+});
+
+router.get('/share/images/:id/preview', async (request, response) => {
+  const params = imageIdSchema.parse(request.params);
+  const image = galleryService.getShareDerivativeImage(params.id);
+
+  if (!image) {
+    response.status(404).json({ message: 'Preview not found' });
+    return;
+  }
+
+  if (!ensureShareFolderAccess(request, response, image.folder_id)) {
+    return;
+  }
+
+  await serveDerivativeForImage(response, image, 'preview', { noStore: true });
 });
 
 router.get('/places', (_request, response) => {

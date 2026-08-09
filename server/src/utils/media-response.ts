@@ -22,6 +22,15 @@ export function applyDerivativeErrorHeaders(response: HeaderResponse): void {
   }
 }
 
+export function applyNoStoreMediaHeaders(response: HeaderResponse & { vary?: (field: string) => void }): void {
+  response.setHeader('Cache-Control', 'private, no-store');
+  if (typeof response.vary === 'function') {
+    response.vary('Cookie');
+  } else {
+    response.setHeader('Vary', 'Cookie');
+  }
+}
+
 export function createProtectedStaticOptions() {
   return {
     fallthrough: false,

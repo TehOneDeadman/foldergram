@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FolderSummary } from '../types/api';
+import { useAuthStore } from '../stores/auth';
 import FolderHeader from './FolderHeader.vue';
 
 vi.mock('vue-router', async () => {
@@ -37,6 +38,76 @@ function createFolder(overrides: Partial<FolderSummary> = {}): FolderSummary {
 describe('FolderHeader', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  it('shows the share button only to admins', async () => {
+    const adminWrapper = mount(FolderHeader, {
+      props: {
+        folder: createFolder()
+      },
+      global: {
+        stubs: {
+          Avatar: {
+            template: '<div data-test="avatar" />'
+          },
+          FolderProfileModal: {
+            template: '<div data-test="folder-profile-modal" />'
+          },
+          FolderShareModal: {
+            template: '<div data-test="folder-share-modal" />'
+          },
+          RouterLink: {
+            template: '<a><slot /></a>'
+          }
+        }
+      }
+    });
+
+    expect(adminWrapper.find('button[aria-label="Share folder"]').exists()).toBe(true);
+
+    setActivePinia(createPinia());
+    const authStore = useAuthStore();
+    authStore.applyStatus({
+      enabled: true,
+      authenticated: false,
+      role: 'anonymous',
+      accessMode: 'off',
+      likesMode: 'local',
+      defaultLocale: null,
+      capabilities: {
+        canManageLibrary: false,
+        canDeleteMedia: false,
+        canAccessSettings: false,
+        canUseSharedLikes: false,
+        canUseLocalFavorites: true,
+        canUseSharedCollections: false,
+        canUseLocalCollections: true
+      }
+    });
+
+    const viewerWrapper = mount(FolderHeader, {
+      props: {
+        folder: createFolder()
+      },
+      global: {
+        stubs: {
+          Avatar: {
+            template: '<div data-test="avatar" />'
+          },
+          FolderProfileModal: {
+            template: '<div data-test="folder-profile-modal" />'
+          },
+          FolderShareModal: {
+            template: '<div data-test="folder-share-modal" />'
+          },
+          RouterLink: {
+            template: '<a><slot /></a>'
+          }
+        }
+      }
+    });
+
+    expect(viewerWrapper.find('button[aria-label="Share folder"]').exists()).toBe(false);
   });
 
   it('keeps the description expanded during same-folder description edits', async () => {

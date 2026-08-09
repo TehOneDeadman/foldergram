@@ -162,6 +162,26 @@ export interface CollectionMembershipRecord extends CollectionSummaryRecord {
   contains_image: number;
 }
 
+export interface FolderShareLinkRecord {
+  id: number;
+  folder_id: number;
+  token_hash: string;
+  token_prefix: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  allow_original_downloads: number;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface FolderSharePasswordRecord {
+  folder_id: number;
+  password_hash: string;
+  password_salt: string;
+  version: number;
+  updated_at: string;
+}
+
 export interface FeedImage {
   id: number;
   folderId: number;
@@ -214,4 +234,52 @@ export interface PlaceDetail extends PlaceSummary {
   countryCode: string | null;
   description: string | null;
   postCount: number;
+}
+
+export interface SharedFolderSummary {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  imageCount: number;
+  videoCount: number;
+  avatarThumbnailUrl: string | null;
+  sortTimestamp: number;
+}
+
+export interface SharedFeedItem {
+  id: number;
+  folderId: number;
+  folderSlug: string;
+  folderName: string;
+  filename: string;
+  caption: string | null;
+  width: number;
+  height: number;
+  mediaType: MediaType;
+  durationMs: number | null;
+  isAnimated?: boolean | null;
+  thumbnailUrl: string;
+  previewUrl: string;
+  sortTimestamp: number;
+}
+
+export interface SharedImageDetail {
+  id: number;
+  folderId: number;
+  folderSlug: string;
+  folderName: string;
+  filename: string;
+  caption: string | null;
+  mediaType: MediaType;
+  mimeType: string;
+  width: number;
+  height: number;
+  durationMs: number | null;
+  isAnimated?: boolean | null;
+  thumbnailUrl: string;
+  previewUrl: string;
+  sortTimestamp: number;
+  nextImageId: number | null;
+  previousImageId: number | null;
 }

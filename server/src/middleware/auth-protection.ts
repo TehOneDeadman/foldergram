@@ -9,10 +9,17 @@ export const AUTH_FORBIDDEN_MESSAGE = 'You do not have permission to perform thi
 function isPublicApiRoute(request: express.Request): boolean {
   const method = request.method.toUpperCase();
   const path = request.path;
+  const isShareReadRoute = path.startsWith('/share/') && isSafeReadMethod(method);
+  const isShareUnlockRoute =
+    method === 'POST' &&
+    path.startsWith('/share/folders/') &&
+    (path.endsWith('/unlock-link') || path.endsWith('/unlock-password'));
 
   return (
     (method === 'GET' && (path === '/health' || path === '/auth/status')) ||
-    (method === 'POST' && (path === '/auth/login' || path === '/auth/logout' || path === '/auth/unlock-admin'))
+    (method === 'POST' && (path === '/auth/login' || path === '/auth/logout' || path === '/auth/unlock-admin')) ||
+    isShareReadRoute ||
+    isShareUnlockRoute
   );
 }
 
