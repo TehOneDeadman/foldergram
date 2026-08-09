@@ -12,6 +12,8 @@ import MomentView from '../views/MomentView.vue';
 import PlaceView from '../views/PlaceView.vue';
 import PlacesView from '../views/PlacesView.vue';
 import ReelsView from '../views/ReelsView.vue';
+import SharedFolderView from '../views/SharedFolderView.vue';
+import SharedPostView from '../views/SharedPostView.vue';
 import TrashView from '../views/TrashView.vue';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
@@ -136,6 +138,24 @@ export const router = createRouter({
       name: 'folder',
       component: FolderView,
       props: true
+    },
+    {
+      path: '/share/:slug',
+      name: 'shared-folder',
+      component: SharedFolderView,
+      props: true,
+      meta: {
+        publicShare: true
+      }
+    },
+    {
+      path: '/share/:slug/images/:id',
+      name: 'shared-image',
+      component: SharedPostView,
+      props: true,
+      meta: {
+        publicShare: true
+      }
     }
   ],
   scrollBehavior(to, from, savedPosition) {
@@ -160,7 +180,15 @@ export function routeRequiresSavedItems(route: Pick<RouteLocationNormalized, 'me
   return route.meta.requiresSavedItems === true;
 }
 
+export function routeAllowsPublicShareAccess(route: Pick<RouteLocationNormalized, 'meta'>): boolean {
+  return route.meta.publicShare === true;
+}
+
 export function canAccessRoute(route: Pick<RouteLocationNormalized, 'meta'>): boolean {
+  if (routeAllowsPublicShareAccess(route)) {
+    return true;
+  }
+
   const authStore = useAuthStore(pinia);
   const requiredCapability = getRouteRequiredCapability(route);
 

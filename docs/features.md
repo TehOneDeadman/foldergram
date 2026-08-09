@@ -98,6 +98,7 @@ Folder pages include:
 
 - a folder header with avatar, posts counts, descriptions, and optional avatar-story opening
 - editable folder name and description via an admin "Edit App Folder" flow
+- an admin-only "Share folder" action for scoped read-only sharing
 - long descriptions that collapse to two lines by default and expose an expand/collapse caret only when the text actually overflows
 - a posts grid that follows the app-wide default folder order
 - highlight circles above the posts and reels tabs when the folder has story capsules
@@ -109,6 +110,35 @@ The reels tab is a filtered view backed by the same folder endpoint using
 
 The post viewer also uses the same default folder order when resolving previous
 and next navigation within a folder.
+
+## Folder sharing
+
+Admins can share one folder without creating user accounts or unlocking the
+whole library.
+
+The Share Folder dialog supports:
+
+- normal public folder URL copying when public viewer mode is enabled
+- read-only links for one folder
+- expiration presets for 1 hour, 24 hours, and 7 days
+- custom expiration timestamps
+- unlimited links that remain revocable
+- reusable per-folder passwords
+- revoking existing share links
+- removing or changing the folder password to invalidate password sessions
+
+Share links and password access are independent ways to open the folder. An
+active share link does not require the folder password, and revoking a link does
+not disable password access. The dialog shows every active access method and
+clarifies which methods remain available after an access setting changes.
+
+Shared visitors use `/share/:slug`, not the normal authenticated folder route.
+They can browse only that folder and its shared post view. They do not get Home,
+Explore, Reels, Places, Settings, Likes, Collections, Trash, scans, rebuild
+actions, captions, cover editing, delete actions, or original-file downloads.
+
+Shared thumbnails and previews are served through `/api/share/images/:id/...`
+after the server checks the folder grant for that image.
 
 ## Folder stories and highlights
 

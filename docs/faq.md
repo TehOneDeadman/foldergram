@@ -111,6 +111,22 @@ The current implementation supports:
 
 It still does **not** have per-user accounts or per-user data isolation.
 
+## Can I share only one folder?
+
+Yes. Admins can open a folder page and use the Share button next to `Edit App
+Folder`.
+
+Folder sharing supports expiring links, unlimited revocable links, and reusable
+per-folder passwords. Shared visitors open `/share/:slug` and can browse only
+that folder.
+
+## Do folder shares unlock the whole library?
+
+No. A folder share is not an admin session, viewer session, or public-library
+mode. It does not grant Home, feed search, Reels, Places, Likes, Collections,
+Trash, Settings, scans, rebuild actions, captions, cover editing, delete
+actions, or original-file downloads.
+
 ## Why does the API call posts "images" in some fields?
 
 That naming is historical. The current app indexes both images and videos, and

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS folders (
   description TEXT NULL,
   avatar_image_id INTEGER NULL,
   avatar_source TEXT NOT NULL DEFAULT 'auto',
+  share_password_version INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (avatar_image_id) REFERENCES images(id),
@@ -128,6 +129,28 @@ CREATE TABLE IF NOT EXISTS collection_items (
   FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS folder_share_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  folder_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  token_prefix TEXT NULL,
+  expires_at TEXT NULL,
+  revoked_at TEXT NULL,
+  allow_original_downloads INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at TEXT NULL,
+  FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS folder_share_passwords (
+  folder_id INTEGER PRIMARY KEY,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_folders_slug ON folders(slug);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_folder_path ON folders(folder_path);
 CREATE INDEX IF NOT EXISTS idx_folders_role ON folders(role);
@@ -159,4 +182,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_collections_single_default ON collections(
 CREATE INDEX IF NOT EXISTS idx_collections_updated_at ON collections(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_collection_items_image ON collection_items(image_id);
 CREATE INDEX IF NOT EXISTS idx_collection_items_created ON collection_items(collection_id, created_at DESC, image_id DESC);
+CREATE INDEX IF NOT EXISTS idx_folder_share_links_folder_id ON folder_share_links(folder_id);
+CREATE INDEX IF NOT EXISTS idx_folder_share_links_expires_at ON folder_share_links(expires_at);
 `;

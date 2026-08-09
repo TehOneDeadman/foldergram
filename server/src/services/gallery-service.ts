@@ -36,9 +36,13 @@ import type {
   FolderRecord,
   FolderSummaryRecord,
   ImageDetail,
+  ImageRecord,
   MediaType,
   PlaceKind,
   PlaybackStrategy,
+  SharedFeedItem,
+  SharedFolderSummary,
+  SharedImageDetail,
   TrashImage
 } from '../types/models.js';
 import {
@@ -259,6 +263,22 @@ function toPublicMediaUrl(basePath: '/thumbnails' | '/previews', relativePath: s
 
 function buildOriginalUrl(id: number): string {
   return `/api/originals/${id}`;
+}
+
+function appendVersion(url: string, version?: string | null): string {
+  if (!version) {
+    return url;
+  }
+
+  return `${url}?v=${encodeURIComponent(version)}`;
+}
+
+function buildShareThumbnailUrl(id: number, version?: string | null): string {
+  return appendVersion(`/api/share/images/${id}/thumbnail`, version);
+}
+
+function buildSharePreviewUrl(id: number, version?: string | null): string {
+  return appendVersion(`/api/share/images/${id}/preview`, version);
 }
 
 function buildPreviewUrl(
@@ -482,6 +502,25 @@ function mapFeedImage(image: IndexedFeedImage, derivativeVersion = getDerivative
   };
 }
 
+function mapSharedFeedImage(image: IndexedFeedImage, derivativeVersion = getDerivativeAssetVersion()): SharedFeedItem {
+  return {
+    id: image.id,
+    folderId: image.folderId,
+    folderSlug: image.folderSlug,
+    folderName: image.folderName,
+    filename: image.filename,
+    caption: image.caption,
+    width: image.width,
+    height: image.height,
+    mediaType: image.mediaType,
+    durationMs: image.durationMs,
+    isAnimated: Boolean(image.isAnimated),
+    thumbnailUrl: buildShareThumbnailUrl(image.id, derivativeVersion),
+    previewUrl: buildSharePreviewUrl(image.id, derivativeVersion),
+    sortTimestamp: image.sortTimestamp
+  };
+}
+
 function mapImageDetail(image: IndexedImageDetail, derivativeVersion = getDerivativeAssetVersion()): ImageDetail {
   const { playbackStrategy, exifJson, placeId, placeSlug, placeName, placeKind, placeIsApproximate, isSaved, ...rest } = image;
   const useOriginalForImages = appConfig.imageDetailSource === 'original';
@@ -501,6 +540,28 @@ function mapImageDetail(image: IndexedImageDetail, derivativeVersion = getDeriva
     originalUrl: buildOriginalUrl(rest.id),
     playbackStrategy,
     place: mapPlaceSummaryFromRow({ placeId, placeSlug, placeName, placeKind, placeIsApproximate })
+  };
+}
+
+function mapSharedImageDetail(image: IndexedImageDetail, derivativeVersion = getDerivativeAssetVersion()): SharedImageDetail {
+  return {
+    id: image.id,
+    folderId: image.folderId,
+    folderSlug: image.folderSlug,
+    folderName: image.folderName,
+    filename: image.filename,
+    caption: image.caption,
+    mediaType: image.mediaType,
+    mimeType: image.mimeType,
+    width: image.width,
+    height: image.height,
+    durationMs: image.durationMs,
+    isAnimated: Boolean(image.isAnimated),
+    thumbnailUrl: buildShareThumbnailUrl(image.id, derivativeVersion),
+    previewUrl: buildSharePreviewUrl(image.id, derivativeVersion),
+    sortTimestamp: image.sortTimestamp,
+    nextImageId: image.nextImageId,
+    previousImageId: image.previousImageId
   };
 }
 
@@ -569,6 +630,22 @@ function buildFolderSummary(folder: FolderSummaryRecord) {
     hasAvatarStory: Boolean(folder.has_avatar_story),
     avatarImageId: avatar?.id ?? null,
     avatarUrl: avatar ? mapImageDetail(avatar, derivativeVersion).thumbnailUrl : null
+  };
+}
+
+function buildSharedFolderSummary(folder: FolderSummaryRecord): SharedFolderSummary {
+  const derivativeVersion = getDerivativeAssetVersion();
+  const summary = buildFolderSummary(folder);
+
+  return {
+    id: summary.id,
+    slug: summary.slug,
+    name: summary.name,
+    description: summary.description,
+    imageCount: summary.imageCount,
+    videoCount: summary.videoCount,
+    avatarThumbnailUrl: summary.avatarImageId ? buildShareThumbnailUrl(summary.avatarImageId, derivativeVersion) : null,
+    sortTimestamp: summary.latestImageMtimeMs ?? 0
   };
 }
 
@@ -1349,6 +1426,19 @@ export const galleryService = {
     return buildFolderSummary(folder);
   },
 
+  getSharedFolderBySlug(slug: string) {
+    if (!storageService.getState().libraryAvailable) {
+      return null;
+    }
+
+    const folder = folderRepository.getSummaryBySlug(slug);
+    if (!folder) {
+      return null;
+    }
+
+    return buildSharedFolderSummary(folder);
+  },
+
   updateFolderMetadata(slug: string, name: string, description: string | null) {
     if (!storageService.getState().libraryAvailable) {
       return null;
@@ -1489,6 +1579,32 @@ export const galleryService = {
     };
   },
 
+  getSharedFolderImages(slug: string, page: number, limit: number, mediaType?: MediaType) {
+    if (!storageService.getState().libraryAvailable) {
+      return null;
+    }
+
+    const folder = folderRepository.getSummaryBySlug(slug);
+    if (!folder) {
+      return null;
+    }
+
+    const total = mediaType ? imageRepository.countVisibleByFolder(folder.id, mediaType) : folder.image_count;
+    const derivativeVersion = getDerivativeAssetVersion();
+    const defaultFolderImageOrder = getDefaultFolderImageOrder();
+
+    return {
+      folder: buildSharedFolderSummary(folder),
+      items: imageRepository
+        .listFolderImages(folder.id, page, limit, mediaType, defaultFolderImageOrder)
+        .map((image) => mapSharedFeedImage(image, derivativeVersion)),
+      page,
+      limit,
+      total,
+      hasMore: page * limit < total
+    };
+  },
+
   getImageDetail(id: number, mediaType?: MediaType) {
     if (!storageService.getState().libraryAvailable) {
       return null;
@@ -1508,6 +1624,38 @@ export const galleryService = {
     }
 
     return mapImageDetail(detail, getDerivativeAssetVersion());
+  },
+
+  getSharedImageDetail(id: number, mediaType?: MediaType) {
+    if (!storageService.getState().libraryAvailable) {
+      return null;
+    }
+
+    const defaultFolderImageOrder = getDefaultFolderImageOrder();
+    const detail = imageRepository.getImageDetail(id, mediaType, false, defaultFolderImageOrder);
+    if (!detail) {
+      return null;
+    }
+
+    return mapSharedImageDetail(detail, getDerivativeAssetVersion());
+  },
+
+  getShareDerivativeImage(id: number): ImageRecord | null {
+    if (!storageService.getState().libraryAvailable) {
+      return null;
+    }
+
+    const image = imageRepository.getById(id);
+    if (!image || image.is_deleted || image.is_trashed) {
+      return null;
+    }
+
+    const folder = folderRepository.getById(image.folder_id);
+    if (!folder || folder.role !== 'normal') {
+      return null;
+    }
+
+    return image;
   },
 
   getPlacesStatus() {

@@ -141,6 +141,11 @@ If you plan to expose Foldergram on a homelab or LAN, open Settings after the
 first load and enable the admin password. From there, you can keep admin-only
 access, add a separate viewer password, or switch to public browse mode.
 
+Admins can also share one folder at a time from a folder page. Open a folder,
+choose the Share button next to `Edit App Folder`, then create an expiring link,
+an unlimited revocable link, or a reusable folder password. Shared visitors use
+`/share/:slug` and stay limited to that folder.
+
 Inside Settings:
 
 - `General Settings` contains stories mode, nested folder title format, excluded folders, Home/Reels defaults, and the default folder photo order
@@ -211,5 +216,6 @@ pnpm build:docs
 - Previews are generated under `data/previews`.
 - In the default unprotected state, Settings is available immediately.
 - After access protection is enabled, only admin sessions can open Settings or run scan and rebuild actions. Viewer and public sessions stay browse-only.
+- Folder share links and folder passwords are read-only and scoped to one folder; they do not grant Settings, Home feed, Reels, Places, Likes, Collections, Trash, or original-file downloads.
 
 If nothing appears, start with [Troubleshooting](/troubleshooting).

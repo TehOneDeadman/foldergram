@@ -137,6 +137,28 @@ vi.mock('../views/ReelsView.vue', async () => {
   };
 });
 
+vi.mock('../views/SharedFolderView.vue', async () => {
+  const { defineComponent } = await import('vue');
+
+  return {
+    default: defineComponent({
+      name: 'SharedFolderView',
+      template: '<div data-test="shared-folder-view">shared-folder-view</div>'
+    })
+  };
+});
+
+vi.mock('../views/SharedPostView.vue', async () => {
+  const { defineComponent } = await import('vue');
+
+  return {
+    default: defineComponent({
+      name: 'SharedPostView',
+      template: '<div data-test="shared-post-view">shared-post-view</div>'
+    })
+  };
+});
+
 vi.mock('../views/TrashView.vue', async () => {
   const { defineComponent } = await import('vue');
 
@@ -291,5 +313,24 @@ describe('router', () => {
     await flushPromises();
     expect(router.currentRoute.value.name).toBe('collection');
     expect(router.currentRoute.value.params.slug).toBe('saved');
+  });
+
+  it('keeps shared folder routes outside normal app capability checks', () => {
+    const authStore = useAuthStore(pinia);
+    authStore.$patch({
+      ready: true,
+      capabilities: {
+        canManageLibrary: false,
+        canDeleteMedia: false,
+        canAccessSettings: false,
+        canUseSharedLikes: false,
+        canUseLocalFavorites: false,
+        canUseSharedCollections: false,
+        canUseLocalCollections: false
+      }
+    });
+
+    expect(canAccessRoute(router.resolve('/share/family'))).toBe(true);
+    expect(canAccessRoute(router.resolve('/share/family/images/42'))).toBe(true);
   });
 });

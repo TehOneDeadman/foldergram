@@ -2,6 +2,7 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close",
+    "copy": "Copy",
     "description": "Description",
     "loadMore": "Load more",
     "loadingMore": "Loading more...",
@@ -673,6 +674,7 @@
       "openStories": "Open folder stories",
       "openAvatar": "Open folder avatar",
       "editButton": "Edit App Folder",
+      "shareButton": "Share folder",
       "posts": "{count} posts",
       "reels": "{count} reels",
       "updated": "{date} updated",
@@ -691,11 +693,89 @@
         "nameRequired": "Name is required."
       }
     },
+    "shareModal": {
+      "title": "Share Folder",
+      "publicUrl": "Public folder URL",
+      "accessSummaryTitle": "Current access",
+      "accessSummaryBoth": "Active share links: {count}. Password access: enabled.",
+      "accessSummaryLinks": "Active share links: {count}. Password access: off.",
+      "accessSummaryPassword": "Active share links: 0. Password access: enabled.",
+      "accessSummaryNone": "Active share links: 0. Password access: off.",
+      "independentMethods": "Share links and password access work independently. You can enable one or both.",
+      "linkSection": "Share links",
+      "linkDescription": "Anyone with an active link can open this folder without a password. Each link expires or can be revoked independently.",
+      "activeLinks": "{count} active",
+      "expiration": "Share link expiration",
+      "customExpiration": "Custom expiration",
+      "createLink": "Create Link",
+      "creating": "Creating...",
+      "createdLink": "Copy this link now",
+      "revoke": "Revoke",
+      "noLinks": "No share links yet.",
+      "passwordSection": "Password access",
+      "passwordDescription": "Anyone with the folder address and password can open it. This does not add password protection to share links.",
+      "passwordEnabled": "Enabled",
+      "passwordOff": "Off",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Minimum 8 characters",
+      "setPassword": "Set Password",
+      "changePassword": "Change Password",
+      "removePassword": "Remove Password",
+      "copyPasswordUrl": "Copy Folder Address",
+      "passwordSharingHint": "Send the folder address and password separately.",
+      "neverExpires": "Never expires",
+      "expiresAt": "Expires {date}",
+      "linkMeta": "Token prefix {prefix}. Created {date}.",
+      "presets": {
+        "oneHour": "1 hour",
+        "day": "24 hours",
+        "week": "7 days",
+        "custom": "Custom",
+        "unlimited": "No expiry"
+      },
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "notices": {
+        "linkCreated": "Share link created. It opens without a password until it expires or is revoked.",
+        "linkRevoked": "Share link revoked.",
+        "linkRevokedWithPassword": "Share link revoked. Password access remains enabled.",
+        "passwordEnabled": "Password access enabled.",
+        "passwordEnabledWithLinks": "Password access enabled. Existing share links still work without a password.",
+        "passwordRemoved": "Password access removed.",
+        "passwordRemovedWithLinks": "Password access removed. Active share links still work."
+      },
+      "errors": {
+        "createLink": "Unable to create share link.",
+        "savePassword": "Unable to save folder password.",
+        "revokeLink": "Unable to revoke share link.",
+        "removePassword": "Unable to remove password access."
+      }
+    },
     "tabs": {
       "posts": "Posts",
       "reels": "Reels",
       "sections": "Folder sections"
     }
+  },
+  "share": {
+    "loadingEyebrow": "Folder Share",
+    "loadingTitle": "Opening shared folder",
+    "passwordEyebrow": "Folder Share",
+    "passwordTitle": "Enter folder password",
+    "passwordDescription": "Enter the reusable folder password to continue.",
+    "passwordFallbackDescription": "This share link is no longer available. If you know the folder password, you can still access this folder.",
+    "passwordLabel": "Password",
+    "unlocking": "Unlocking...",
+    "unlock": "Unlock Folder",
+    "expiredTitle": "This share link is not available",
+    "expiredDescription": "The link may be expired, revoked, or missing its token.",
+    "errorTitle": "Could not open folder share",
+    "errorDescription": "Unable to load this folder share.",
+    "backToFolder": "Back to shared folder",
+    "postErrorTitle": "Could not load shared post"
   },
   "reels": {
     "view": {

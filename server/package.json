@@ -11,7 +11,7 @@
     "migrate:prod": "node dist/scripts/migrate.js",
     "start": "node dist/scripts/migrate.js && node dist/index.js",
     "rescan": "tsx src/scripts/rescan.ts",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.ts test/"
   },
   "dependencies": {
     "chokidar": "^4.0.3",

@@ -30,19 +30,21 @@
 import { RouterLink, useRoute } from 'vue-router';
 
 import { useAppStore } from '../stores/app';
-import type { FeedItem } from '../types/api';
+import type { FeedItem, SharedFeedItem } from '../types/api';
 import { formatMediaDuration } from '../utils/media';
 import ResilientImage from './ResilientImage.vue';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    items: FeedItem[];
+    items: Array<FeedItem | SharedFeedItem>;
     variant?: 'square' | 'posts' | 'reels';
     columns?: 'adaptive' | 'three';
+    sharedSlug?: string | null;
   }>(),
   {
     variant: 'square',
-    columns: 'adaptive'
+    columns: 'adaptive',
+    sharedSlug: null
   }
 );
 
@@ -50,6 +52,17 @@ const appStore = useAppStore();
 const route = useRoute();
 
 function buildImageRoute(id: number) {
+  if (props.sharedSlug) {
+    return {
+      name: 'shared-image',
+      params: {
+        slug: props.sharedSlug,
+        id: String(id)
+      },
+      query: route.query
+    };
+  }
+
   return {
     name: 'image',
     params: { id: String(id) },
@@ -63,6 +76,11 @@ function handleImageNavigation(event: MouseEvent, navigate: () => void) {
   }
 
   event.preventDefault();
+  if (props.sharedSlug) {
+    navigate();
+    return;
+  }
+
   appStore.setImageModalBackground(route.fullPath);
   navigate();
 }

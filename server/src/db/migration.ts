@@ -27,7 +27,9 @@ const APP_SCHEMA_TABLES = [
   'folder_scan_state',
   'likes',
   'collections',
-  'collection_items'
+  'collection_items',
+  'folder_share_links',
+  'folder_share_passwords'
 ] as const;
 
 export interface BaselineResult {

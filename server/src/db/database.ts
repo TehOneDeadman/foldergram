@@ -10,25 +10,42 @@ function initializeTransientDatabase(database: DatabaseSync): DatabaseSync {
   return database;
 }
 
-class DatabaseManager {
-  private database: DatabaseSync | null = null;
+const GLOBAL_DB_KEY = Symbol.for('foldergram.database.connection');
 
+class DatabaseManager {
   get connection(): DatabaseSync {
-    if (this.database) {
-      return this.database;
+    const globalObj = globalThis as unknown as Record<symbol, DatabaseSync | null>;
+    if (globalObj[GLOBAL_DB_KEY]) {
+      return globalObj[GLOBAL_DB_KEY]!;
     }
 
     const databasePath = storageService.getDatabasePath();
 
+    let db: DatabaseSync;
     if (databasePath === ':memory:') {
-      this.database = initializeTransientDatabase(new DatabaseSync(databasePath));
-      return this.database;
+      db = initializeTransientDatabase(new DatabaseSync(databasePath));
+    } else {
+      runStartupMigrations({ databasePath });
+      db = new DatabaseSync(databasePath);
+      assertNoLegacySchema(db);
     }
 
-    runStartupMigrations({ databasePath });
-    this.database = new DatabaseSync(databasePath);
-    assertNoLegacySchema(this.database);
-    return this.database;
+    globalObj[GLOBAL_DB_KEY] = db;
+    return db;
+  }
+
+  close(): void {
+    const globalObj = globalThis as unknown as Record<symbol, DatabaseSync | null>;
+    const db = globalObj[GLOBAL_DB_KEY];
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        // Ignore errors if already closed
+      } finally {
+        globalObj[GLOBAL_DB_KEY] = null;
+      }
+    }
   }
 }
 

@@ -6,6 +6,8 @@ export type FolderImageOrder = 'newest' | 'oldest';
 export type NestedFolderTitleFormat = 'folder' | 'parent-plus-folder';
 export type FeedRailKind = 'moments' | 'highlights';
 export type StoryCapsulePresentation = 'avatar' | 'highlight';
+export type MediaType = 'image' | 'video';
+
 export type ScanOperation =
   | 'checking_derivatives'
   | 'backfilling_asset_key'
@@ -220,6 +222,117 @@ export interface FolderStoryFeedPayload extends PaginatedFeed {
 
 export interface FolderImagesPayload extends PaginatedFeed {
   folder: FolderSummary;
+}
+
+export type FolderShareLinkStatus = 'active' | 'expired' | 'revoked';
+export type FolderShareExpirationPreset = '1h' | '24h' | '7d' | 'custom' | 'unlimited';
+
+export interface FolderShareLink {
+  id: number;
+  folderId: number;
+  tokenPrefix: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  status: FolderShareLinkStatus;
+}
+
+export interface FolderSharePasswordStatus {
+  enabled: boolean;
+  updatedAt: string | null;
+}
+
+export interface FolderShareLinksPayload {
+  links: FolderShareLink[];
+  password: FolderSharePasswordStatus;
+  publicFolderUrl: string;
+  publicAccess: boolean;
+}
+
+export interface CreateFolderShareLinkInput {
+  expiresIn: FolderShareExpirationPreset;
+  customExpiresAt?: string | null;
+  unlimited?: boolean;
+}
+
+export interface CreateFolderShareLinkResult {
+  ok: boolean;
+  shareUrl: string;
+  link: FolderShareLink;
+}
+
+export interface FolderSharePasswordMutationResult {
+  ok: boolean;
+  password: FolderSharePasswordStatus;
+}
+
+export interface FolderShareAccessState {
+  exists: boolean;
+  granted: boolean;
+  hasPassword: boolean;
+  publicAccess: boolean;
+}
+
+export interface SharedFolderSummary {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  imageCount: number;
+  videoCount: number;
+  avatarThumbnailUrl: string | null;
+  sortTimestamp: number;
+}
+
+export interface SharedFeedItem {
+  id: number;
+  folderId: number;
+  folderSlug: string;
+  folderName: string;
+  filename: string;
+  caption: string | null;
+  width: number;
+  height: number;
+  mediaType: MediaType;
+  durationMs: number | null;
+  isAnimated?: boolean | null;
+  thumbnailUrl: string;
+  previewUrl: string;
+  sortTimestamp: number;
+}
+
+export interface SharedImageDetail {
+  id: number;
+  folderId: number;
+  folderSlug: string;
+  folderName: string;
+  filename: string;
+  caption: string | null;
+  mediaType: MediaType;
+  mimeType: string;
+  width: number;
+  height: number;
+  durationMs: number | null;
+  isAnimated?: boolean | null;
+  thumbnailUrl: string;
+  previewUrl: string;
+  sortTimestamp: number;
+  nextImageId: number | null;
+  previousImageId: number | null;
+}
+
+export interface SharedFolderImagesPayload {
+  items: SharedFeedItem[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  folder: SharedFolderSummary;
+}
+
+export interface FolderShareUnlockResult {
+  ok: boolean;
 }
 
 export interface PlaceImagesPayload extends PaginatedFeed {

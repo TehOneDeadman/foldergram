@@ -23,6 +23,7 @@ When password protection is enabled:
 
 - most `/api` routes return `401` until the browser logs in, except for safe read routes in public viewer mode
 - `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/unlock-admin`, and `POST /api/auth/logout` stay reachable without an authenticated session
+- scoped `/api/share/...` routes stay reachable so folder-share visitors can unlock and read one shared folder
 - `PUT /api/auth/password` is public only when password protection is currently disabled, so the first admin password can be set
 - `/thumbnails/...` and `/previews/...` also require the same authenticated session unless public viewer mode is enabled
 - authenticated sessions carry `admin` or `viewer` role data
@@ -337,6 +338,70 @@ Notes:
 
 - results follow the current app-wide default folder image order
 - that same order is reused by detail-view previous/next navigation within a folder
+
+## Folder share endpoints
+
+Folder share endpoints are scoped to one folder. They do not create admin or
+viewer sessions and do not unlock normal library routes.
+
+### `GET /api/share/folders/:slug/access`
+
+Returns whether a shared folder exists, whether the current request already has
+a valid grant, and whether a folder password is available.
+
+Response shape:
+
+```json
+{
+  "exists": true,
+  "granted": false,
+  "hasPassword": true,
+  "publicAccess": false
+}
+```
+
+### `GET /api/share/folders/:slug`
+
+Returns the shared folder summary after the request has access to that folder.
+
+Access can come from:
+
+- a valid admin or viewer session
+- public viewer mode
+- a valid folder-share link session
+- a valid folder-password share session
+
+Errors:
+
+- `401` when the share is locked, expired, or revoked
+- `404` when the folder does not exist
+
+### `GET /api/share/folders/:slug/images`
+
+Query parameters match `GET /api/folders/:slug/images`.
+
+The response shape contains the shared folder summary and a list of redacted item payloads where media URLs point to grant-checking API endpoints:
+
+- `thumbnailUrl`: `/api/share/images/:id/thumbnail`
+- `previewUrl`: `/api/share/images/:id/preview`
+
+Sensitive metadata including local folder paths, relative file paths, and EXIF metadata are omitted.
+
+### `GET /api/share/images/:id`
+
+Returns one shared post detail after checking access to that post's folder.
+
+Shared detail payloads do not expose original-file URLs (`originalUrl`) or local system paths. Only `thumbnailUrl` and `previewUrl` are provided, both pointing to guarded shared media endpoints.
+
+### `GET /api/share/images/:id/thumbnail`
+
+Serves or lazily generates the thumbnail for one shared post after checking the
+folder grant.
+
+### `GET /api/share/images/:id/preview`
+
+Serves or lazily generates the preview for one shared post after checking the
+folder grant.
 
 ### `GET /api/places`
 
@@ -1164,6 +1229,176 @@ Body:
 ```json
 {
   "imageId": 42
+}
+```
+
+Success:
+
+```json
+{
+  "ok": true
+}
+```
+
+### `GET /api/admin/folders/:slug/share-links`
+
+This route is read-only but `admin`-only.
+
+Returns share-link and folder-password status for one folder.
+
+Response shape:
+
+```json
+{
+  "links": [],
+  "password": {
+    "enabled": false,
+    "updatedAt": null
+  },
+  "publicFolderUrl": "/folders/oslo",
+  "publicAccess": false
+}
+```
+
+Each link item includes:
+
+- `id`
+- `folderId`
+- `tokenPrefix`
+- `expiresAt`
+- `revokedAt`
+- `createdAt`
+- `lastUsedAt`
+- `status` as `active`, `expired`, or `revoked`
+
+The token hash is never returned.
+
+### `POST /api/admin/folders/:slug/share-links`
+
+Creates a read-only share link for one folder.
+
+Body:
+
+```json
+{
+  "expiresIn": "24h",
+  "customExpiresAt": null,
+  "unlimited": false
+}
+```
+
+Allowed `expiresIn` values:
+
+- `1h`
+- `24h`
+- `7d`
+- `custom`
+- `unlimited`
+
+For `custom`, provide an ISO timestamp in `customExpiresAt`. `unlimited=true`
+or `expiresIn=unlimited` creates a no-expiry link that can still be revoked.
+
+Success:
+
+```json
+{
+  "ok": true,
+  "shareUrl": "/share/oslo#token=raw-token-shown-once",
+  "link": {
+    "id": 7,
+    "folderId": 1,
+    "tokenPrefix": "abcd1234",
+    "expiresAt": "2026-06-11T12:00:00.000Z",
+    "revokedAt": null,
+    "createdAt": "2026-06-10T12:00:00.000Z",
+    "lastUsedAt": null,
+    "status": "active"
+  }
+}
+```
+
+The raw token appears only inside `shareUrl` in this creation response.
+
+### `DELETE /api/admin/folders/:slug/share-links/:linkId`
+
+Revokes one share link.
+
+Success:
+
+```json
+{
+  "ok": true,
+  "link": {}
+}
+```
+
+### `PUT /api/admin/folders/:slug/share-password`
+
+Sets or changes a reusable folder password.
+
+Body:
+
+```json
+{
+  "password": "folder-password"
+}
+```
+
+Notes:
+
+- password minimum length is `8`
+- changing the password invalidates older password-based share sessions
+- the raw password is never returned or stored
+
+### `DELETE /api/admin/folders/:slug/share-password`
+
+Removes the reusable folder password and invalidates password-based share
+sessions.
+
+Success:
+
+```json
+{
+  "ok": true,
+  "password": {
+    "enabled": false,
+    "updatedAt": null
+  }
+}
+```
+
+### `POST /api/share/folders/:slug/unlock-link`
+
+Verifies a raw share-link token and sets the separate `foldergram_share_session`
+cookie.
+
+Body:
+
+```json
+{
+  "token": "raw-token-from-url-fragment"
+}
+```
+
+Success:
+
+```json
+{
+  "ok": true
+}
+```
+
+Expired, revoked, or otherwise invalid links return `403`.
+
+### `POST /api/share/folders/:slug/unlock-password`
+
+Verifies a reusable folder password and sets the same share-session cookie.
+
+Body:
+
+```json
+{
+  "password": "folder-password"
 }
 ```
 

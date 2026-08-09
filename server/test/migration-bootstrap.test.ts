@@ -143,7 +143,7 @@ describe.sequential('dbmate startup migrations', () => {
       expect(tableExists(database, 'images')).toBe(true);
       expect(tableExists(database, 'collections')).toBe(true);
       expect(tableHasColumn(database, 'images', 'caption')).toBe(true);
-      expect(listAppliedVersions(database)).toEqual([BASELINE_MIGRATION_VERSION, '000002']);
+      expect(listAppliedVersions(database)).toEqual([BASELINE_MIGRATION_VERSION, '000002', '000004']);
     } finally {
       database.close();
     }
@@ -238,7 +238,7 @@ describe.sequential('dbmate startup migrations', () => {
     const database = new DatabaseSync(databasePath);
 
     try {
-      expect(listAppliedVersions(database)).toEqual([BASELINE_MIGRATION_VERSION, '000002']);
+      expect(listAppliedVersions(database)).toEqual([BASELINE_MIGRATION_VERSION, '000002', '000004']);
       expect(tableExists(database, 'collections')).toBe(true);
       expect(tableHasColumn(database, 'folders', 'avatar_image_id')).toBe(true);
       expect(tableHasColumn(database, 'folders', 'avatar_source')).toBe(true);
@@ -292,7 +292,7 @@ ALTER TABLE images ADD COLUMN migration_note TEXT NULL;
 
     try {
       expect(tableHasColumn(database, 'images', 'migration_note')).toBe(true);
-      expect(listAppliedVersions(database)).toEqual([BASELINE_MIGRATION_VERSION, '000002', '000003']);
+      expect(listAppliedVersions(database)).toEqual([BASELINE_MIGRATION_VERSION, '000002', '000003', '000004']);
     } finally {
       database.close();
     }
@@ -400,7 +400,7 @@ ALTER TABLE images ADD COLUMN migration_note TEXT NULL;
     const database = new DatabaseSync(databasePath);
 
     try {
-      expect(listAppliedVersions(database)).toEqual(['000001', '000002', '000003']);
+      expect(listAppliedVersions(database)).toEqual(['000001', '000002', '000003', '000004']);
       expect(tableHasColumn(database, 'images', 'migration_note')).toBe(true);
       expect(tableHasColumn(database, 'images', 'caption')).toBe(true);
       expect(database.prepare('SELECT playback_strategy AS playbackStrategy FROM images WHERE id = 1').get()).toEqual({
@@ -435,8 +435,8 @@ ALTER TABLE images ADD COLUMN migration_note TEXT NULL;
     const database = new DatabaseSync(databasePath);
 
     try {
-      expect(listAppliedVersions(database)).toEqual(['000001', '000002', '000003']);
-      expect(database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 3 });
+      expect(listAppliedVersions(database)).toEqual(['000001', '000002', '000003', '000004']);
+      expect(database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 4 });
     } finally {
       database.close();
     }
@@ -521,5 +521,37 @@ THIS IS NOT VALID SQL;
 
     const { databaseManager } = await importDatabaseModule();
     expect(tableExists(databaseManager.connection, 'folders')).toBe(true);
+  });
+
+  it('adds share_password_version to folders and creates folder_share_passwords in consolidated 000004 migration', async () => {
+    const { runStartupMigrations } = await importMigrationModule();
+    const databasePath = path.join(tempRoot, 'db', 'gallery.sqlite');
+    await fs.mkdir(path.dirname(databasePath), { recursive: true });
+
+    runStartupMigrations({ databasePath });
+
+    const database = new DatabaseSync(databasePath);
+
+    try {
+      expect(tableHasColumn(database, 'folders', 'share_password_version')).toBe(true);
+
+      const columnInfo = getColumnInfo(database, 'folders', 'share_password_version');
+      expect(columnInfo).not.toBeNull();
+      expect(columnInfo?.notnull).toBe(1);
+      expect(columnInfo?.dflt_value).toBe('0');
+
+      database
+        .prepare('INSERT INTO folders(slug, name, folder_path) VALUES (?, ?, ?)')
+        .run('test-folder', 'Test Folder', 'test-folder');
+
+      const inserted = database
+        .prepare('SELECT share_password_version FROM folders WHERE slug = ?')
+        .get('test-folder') as { share_password_version: number };
+
+      expect(inserted.share_password_version).toBe(0);
+      expect(tableExists(database, 'folder_share_passwords')).toBe(true);
+    } finally {
+      database.close();
+    }
   });
 });
