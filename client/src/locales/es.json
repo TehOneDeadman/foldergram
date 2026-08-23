@@ -59,6 +59,8 @@
     "primary": "Navegación principal",
     "foldergramHome": "Inicio de Foldergram",
     "home": "Inicio",
+    "about": "Acerca de",
+    "disclaimer": "Aviso legal",
     "reels": "Reels",
     "search": "Buscar",
     "library": "Biblioteca",
@@ -186,7 +188,8 @@
         "options": {
           "en": "Inglés",
           "es": "Español",
-          "zh": "Chino"
+          "zh": "Chino",
+          "de": "Alemán"
         }
       },
       "homeFeed": {

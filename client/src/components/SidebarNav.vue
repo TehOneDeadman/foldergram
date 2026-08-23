@@ -7,12 +7,12 @@
       to="/"
       :aria-label="t('nav.foldergramHome')"
     >
-      <span
+      <!--<span
         class="pointer-events-none absolute top-[0.16rem] left-1/2 -translate-x-1/2 text-[0.42rem] leading-none tracking-[0.08em] text-muted"
         aria-hidden="true"
       >
         {{ appVersion }}
-      </span>
+      </span>-->
       <BrandMark />
     </RouterLink>
 
@@ -245,6 +245,70 @@
                 max-width 0.22s ease;
             "
             >{{ t('nav.collections') }}</span
+          >
+        </a>
+      </RouterLink>
+
+      <RouterLink
+        custom
+        :to="{ name: 'about' }"
+        v-slot="{ href, navigate, isActive }"
+      >
+        <a
+          :href="href"
+          class="sidebar__link sidebar-item"
+          :class="isActive ? sidebarActiveClass : ''"
+          @click="navigate"
+        >
+          <span
+            class="sidebar__icon flex-shrink-0 w-[1.45rem] h-[1.45rem]"
+            :class="
+              isActive
+                ? 'i-fluent-chat-help-24-filled'
+                : 'i-fluent-chat-help-24-regular'
+            "
+            aria-hidden="true"
+          />
+          <span
+            class="sidebar__label max-w-0 overflow-hidden whitespace-nowrap text-[0.9rem] opacity-0 group-hover:max-w-[12rem] group-hover:opacity-100"
+            style="
+              transition:
+                opacity 0.18s ease,
+                max-width 0.22s ease;
+            "
+            >{{ t('nav.about') }}</span
+          >
+        </a>
+      </RouterLink>
+      
+      <RouterLink
+        custom
+        :to="{ name: 'disclaimer' }"
+        v-slot="{ href, navigate, isActive }"
+      >
+        <a
+          :href="href"
+          class="sidebar__link sidebar-item"
+          :class="isActive ? sidebarActiveClass : ''"
+          @click="navigate"
+        >
+          <span
+            class="sidebar__icon flex-shrink-0 w-[1.45rem] h-[1.45rem]"
+            :class="
+              isActive
+                ? 'i-fluent-book-information-24-filled'
+                : 'i-fluent-book-information-24-regular'
+            "
+            aria-hidden="true"
+          />
+          <span
+            class="sidebar__label max-w-0 overflow-hidden whitespace-nowrap text-[0.9rem] opacity-0 group-hover:max-w-[12rem] group-hover:opacity-100"
+            style="
+              transition:
+                opacity 0.18s ease,
+                max-width 0.22s ease;
+            "
+            >{{ t('nav.disclaimer') }}</span
           >
         </a>
       </RouterLink>

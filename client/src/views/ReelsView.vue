@@ -251,7 +251,7 @@ watch(activeItem, (item) => {
 .reels-view {
   height: 100%;
   min-height: 100%;
-  background: var(--bg);
+  /*background: var(--bg);*/
   color: var(--text);
 }
 

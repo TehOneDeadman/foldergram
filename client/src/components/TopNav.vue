@@ -94,6 +94,30 @@
           </a>
         </RouterLink>
 
+        <RouterLink custom :to="{ name: 'about' }" v-slot="{ href, navigate, isActive }">
+          <a
+            :href="href"
+            class="mobile-nav__item"
+            :class="isActive ? mobileNavActiveClass : ''"
+            :aria-label="t('nav.about')"
+            @click="handleNavNavigate($event, navigate)"
+          >
+            <span class="mobile-nav__icon" :class="isActive ? 'i-fluent-chat-help-16-filled' : 'i-fluent-chat-help-16-regular'" aria-hidden="true" />
+          </a>
+        </RouterLink>
+
+         <RouterLink custom :to="{ name: 'disclaimer' }" v-slot="{ href, navigate, isActive }">
+          <a
+            :href="href"
+            class="mobile-nav__item"
+            :class="isActive ? mobileNavActiveClass : ''"
+            :aria-label="t('nav.disclaimer')"
+            @click="handleNavNavigate($event, navigate)"
+          >
+            <span class="mobile-nav__icon" :class="isActive ? 'i-fluent-book-information-24-filled' : 'i-fluent-book-information-24-regular'" aria-hidden="true" />
+          </a>
+        </RouterLink>
+
         <div class="mobile-nav__more">
           <button
             class="mobile-nav__item mobile-nav__more-button"

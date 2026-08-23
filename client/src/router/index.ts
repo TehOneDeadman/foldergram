@@ -15,6 +15,8 @@ import ReelsView from '../views/ReelsView.vue';
 import SharedFolderView from '../views/SharedFolderView.vue';
 import SharedPostView from '../views/SharedPostView.vue';
 import TrashView from '../views/TrashView.vue';
+import AboutView from '../views/AboutView.vue';
+import DisclaimerView from '../views/DisclaimerView.vue';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
 import { pinia } from '../stores/pinia';
@@ -165,6 +167,16 @@ export const router = createRouter({
       meta: {
         publicShare: true
       }
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: AboutView
+    },
+    {
+      path: '/disclaimer',
+      name: 'disclaimer',
+      component: DisclaimerView
     }
   ],
   scrollBehavior(to, from, savedPosition) {
