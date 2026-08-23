@@ -24,6 +24,9 @@ function createAppStatus(
   return {
     folders: 3,
     indexedImages: 18,
+    indexedPosts: 18,
+    indexedMediaAssets: 21,
+    indexedCarousels: 3,
     indexedVideos: 6,
     scan: {
       isScanning: false,
@@ -61,11 +64,17 @@ function createAppStatus(
       defaultReelsFeedMode,
       defaultFolderImageOrder,
       nestedFolderTitleFormat: 'folder',
-      treatStoriesAsFolders: false
+      treatStoriesAsFolders: false,
+      treatCarouselsAsFolders: false
     },
     storiesMigration: {
       hasLegacyStoriesCandidates: false,
       decisionPending: false
+    },
+    carouselsMigration: {
+      hasLegacyCarouselsCandidates: false,
+      decisionPending: false,
+      reconciliationPending: false
     }
   };
 }
@@ -142,6 +151,7 @@ describe('SettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.restoreAllMocks();
+    window.localStorage.clear();
     scrollIntoViewSpy.mockReset();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -332,6 +342,30 @@ describe('SettingsView', () => {
     expect(wrapper.text()).toContain('24 indexed media records still use the old mirrored thumbnail and preview paths.');
     expect(wrapper.text()).toContain('Run Scan Library to move legacy mirrored thumbnails and previews into the asset-key storage layout.');
     expect(wrapper.text()).toContain('This keeps the current thumbnail paths and does not migrate legacy mirrored derivatives.');
+  });
+
+  it('shows localized scan guidance while carousel folder reconciliation is pending', async () => {
+    const appStore = useAppStore();
+    const status = createAppStatus();
+    status.carouselsMigration = {
+      hasLegacyCarouselsCandidates: false,
+      decisionPending: false,
+      reconciliationPending: true
+    };
+    appStore.$patch({ stats: status });
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Carousel folder update pending');
+    expect(wrapper.text()).toContain(
+      'The saved Carousel folder mode has not been applied to the index. Run Scan Library to update folders and posts.'
+    );
+    expect(wrapper.text()).toContain(
+      'Run Scan Library to apply the saved Carousel folder mode to indexed folders and posts.'
+    );
+    expect(wrapper.text()).not.toContain('settings.library.carouselReconciliation');
+    expect(wrapper.text()).not.toContain('settings.library.scanActionNote.carouselReconciliation');
   });
 
   it('shows the Places onboarding banner and opens the Places tab from its setup action', async () => {
@@ -679,5 +713,186 @@ describe('SettingsView', () => {
     expect(wrapper.text()).not.toContain('This library may already use folders named stories');
     expect(wrapper.get('button[role="switch"]').attributes('aria-checked')).toBe('true');
     expect(scrollIntoViewSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows, expands, and permanently dismisses the carousel posts announcement', async () => {
+    const appStore = useAppStore();
+    const status = createAppStatus();
+    status.carouselsMigration = {
+      hasLegacyCarouselsCandidates: false,
+      decisionPending: true
+    };
+    appStore.$patch({ stats: status });
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+    await openGeneralSettingsSidebarTab(wrapper);
+
+    expect(wrapper.text()).toContain('Carousel Posts');
+    expect(wrapper.text()).toContain('Reserved carousels/ folders can combine media into one post');
+    expect(wrapper.text()).not.toContain('This library may already use folders named carousels');
+
+    const structureButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'See carousel directory structure');
+    expect(structureButton).toBeDefined();
+    await structureButton!.trigger('click');
+
+    expect(wrapper.text()).toContain('carousels/');
+    expect(wrapper.text()).toContain('02-lions.mp4');
+    expect(wrapper.text()).toContain('detail.jpg');
+    expect(wrapper.text()).not.toContain('02-detail.jpg');
+
+    const dismissButton = wrapper.get('button[aria-label="Dismiss carousel posts announcement"]');
+    await dismissButton.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('Reserved carousels/ folders can combine media into one post');
+    expect(window.localStorage.getItem('foldergram-carousels-announcement-dismissed:v1')).toBe('1');
+
+    wrapper.unmount();
+    const remountedWrapper = mountSettingsView();
+    await flushPromises();
+    await openGeneralSettingsSidebarTab(remountedWrapper);
+
+    expect(remountedWrapper.text()).not.toContain('Reserved carousels/ folders can combine media into one post');
+  });
+
+  it('shows the carousel migration decision instead of the announcement when indexed folders conflict', async () => {
+    const appStore = useAppStore();
+    const status = createAppStatus();
+    status.carouselsMigration = {
+      hasLegacyCarouselsCandidates: true,
+      decisionPending: true
+    };
+    appStore.$patch({ stats: status });
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+    await openGeneralSettingsSidebarTab(wrapper);
+
+    expect(wrapper.text()).toContain('This library may already use folders named carousels');
+    expect(wrapper.text()).not.toContain('Reserved carousels/ folders can combine media into one post');
+  });
+
+  it('keeps the Carousel reconciliation reminder visible after settings reload until a scan completes', async () => {
+    const appStore = useAppStore();
+    const status = createAppStatus();
+    status.carouselsMigration = {
+      hasLegacyCarouselsCandidates: true,
+      decisionPending: false,
+      reconciliationPending: true
+    };
+    appStore.$patch({ stats: status });
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Carousel folder update pending');
+    expect(wrapper.text()).toContain('Run Scan Library to update folders and posts.');
+    const scanButton = wrapper.findAll('button').find((button) => button.text() === 'Run Scan Library');
+    expect(scanButton?.attributes('disabled')).toBeUndefined();
+
+    await openGeneralSettingsSidebarTab(wrapper);
+
+    expect(wrapper.text()).toContain(
+      'Run a library scan to apply the saved Carousel folder mode to indexed folders and posts.'
+    );
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === 'Saved');
+    expect(saveButton?.attributes('disabled')).toBeDefined();
+  });
+
+  it('directs pending Carousel reconciliation to the enabled rebuild action when a rebuild is required', async () => {
+    const appStore = useAppStore();
+    const status = createAppStatus();
+    status.libraryIndex.rebuildRequired = true;
+    status.libraryIndex.reason = 'gallery_root_changed';
+    status.carouselsMigration = {
+      hasLegacyCarouselsCandidates: true,
+      decisionPending: false,
+      reconciliationPending: true
+    };
+    appStore.$patch({ stats: status });
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Rebuild Library Index below to apply it to the current gallery location.');
+    const scanButton = wrapper.findAll('button').find((button) => button.text() === 'Run Scan Library');
+    const rebuildButton = wrapper.findAll('button').find((button) => button.text() === 'Rebuild Library Index');
+    expect(scanButton?.attributes('disabled')).toBeDefined();
+    expect(rebuildButton?.attributes('disabled')).toBeUndefined();
+
+    await openGeneralSettingsSidebarTab(wrapper);
+    expect(wrapper.text()).toContain(
+      'Rebuild the library index to apply the saved Carousel folder mode to the current gallery location.'
+    );
+  });
+
+  it('directs a saved Carousel mode to rebuild when the gallery location requires a new index', async () => {
+    const appStore = useAppStore();
+    const status = createAppStatus();
+    status.libraryIndex.rebuildRequired = true;
+    status.libraryIndex.reason = 'gallery_root_changed';
+    appStore.$patch({ stats: status });
+    vi.spyOn(appStore, 'fetchStats').mockResolvedValue();
+
+    const responseStatus = createAppStatus();
+    responseStatus.libraryIndex.rebuildRequired = true;
+    responseStatus.libraryIndex.reason = 'gallery_root_changed';
+    responseStatus.preferences.treatCarouselsAsFolders = true;
+    responseStatus.carouselsMigration.reconciliationPending = true;
+    vi.spyOn(galleryApi, 'updateCarouselsMode').mockResolvedValue(responseStatus);
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+    await openGeneralSettingsSidebarTab(wrapper);
+
+    const switches = wrapper.findAll('button[role="switch"]');
+    await switches[1]!.trigger('click');
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === 'Save changes');
+    await saveButton!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      'Folder behavior was saved. Rebuild the library index to apply it to the current gallery location.'
+    );
+  });
+
+  it('displays accurate localized success message when only carousel setting is changed', async () => {
+    const appStore = useAppStore();
+    appStore.$patch({
+      stats: createAppStatus()
+    });
+
+    vi.spyOn(appStore, 'fetchStats').mockResolvedValue();
+    const updateCarouselsSpy = vi.spyOn(galleryApi, 'updateCarouselsMode').mockResolvedValue(createAppStatus());
+
+    const wrapper = mountSettingsView();
+    await flushPromises();
+    await openGeneralSettingsSidebarTab(wrapper);
+
+    const switches = wrapper.findAll('button[role="switch"]');
+    const carouselSwitch = switches[1]; // Second switch is carousels
+    expect(carouselSwitch).toBeDefined();
+
+    await carouselSwitch!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      'Save this change, then run a library scan before expecting carousel posts or carousels folders to update.'
+    );
+
+    const saveButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save changes');
+
+    expect(saveButton).toBeDefined();
+    await saveButton!.trigger('click');
+    await flushPromises();
+
+    expect(updateCarouselsSpy).toHaveBeenCalledWith(true);
+    expect(wrapper.text()).toContain('Carousel folder behavior was saved. Run a library scan to apply it.');
+    expect(wrapper.text()).not.toContain('Stories folder behavior was saved');
   });
 });

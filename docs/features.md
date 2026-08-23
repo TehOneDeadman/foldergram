@@ -266,7 +266,7 @@ Its left sidebar is split into:
 | Section | What it contains |
 | --- | --- |
 | `Scan & Library` | Phase-aware live scan state, manual scan, thumbnail-only rebuild, and library-index rebuild actions. Admins also see the full report path when a scan finishes with skipped media errors. |
-| `General Settings` | App-language selection with instant local switching plus saved app-wide defaults, Home and Reels default feed modes, the default App Folder photo order, nested folder title format, stories-folders mode, excluded-folder rules, migration notices, and save-and-rescan prompts for those app-wide changes. |
+| `General Settings` | App-language selection with instant local switching plus saved app-wide defaults, Home and Reels default feed modes, the default App Folder photo order, nested folder title format, stories and carousel folder modes, excluded-folder rules, feature introductions, migration decisions, and save-and-scan prompts for folder-rule changes. |
 | `Places` | Offline GeoNames preparation status plus place-assignment rebuild actions for GPS-tagged photos. |
 | `Security & Access` | Admin password, viewer password, public mode, sign-out, and related auth controls. |
 | `System Status` | Storage and index state plus last completed scan details, including whether the last run completed with errors. |
@@ -277,9 +277,11 @@ changes` also stores the selected language as the app-wide default for browsers
 without their own override. That saved default also reaches the login gate and
 other pre-auth translated UI on devices that are using the app-wide language.
 Nested folder title format changes are presentation-only and update without a
-rescan. Env-backed excluded-folder rules are shown read-only and custom rules
-are saved at runtime. Changing stories mode or excluded folders still requires
-a follow-up scan from `Scan & Library`.
+scan. Env-backed excluded-folder rules are shown read-only and custom rules
+are saved at runtime. After changing stories mode, carousel mode, or excluded
+folders, follow the action shown in `Scan & Library` to update the index. Run a
+library scan normally, or rebuild the index when the gallery location requires
+one.
 
 On mobile, Settings uses a dedicated sticky top icon bar instead of the desktop
 sidebar.
@@ -347,3 +349,7 @@ The current repository does **not** implement:
 - remote multi-user permissions
 - cloud sync
 - hierarchical album navigation
+
+## Carousel posts
+
+Carousel posts combine 2–20 images, animated images, and videos in one feed card and viewer. Arrow buttons, keyboard controls, touch swipes, counters, and dots move between items. The post has one shared caption and one set of like, save, collection, trash, and delete actions; active-item download and file details remain asset-specific. See [Carousel Posts](/carousel-posts).

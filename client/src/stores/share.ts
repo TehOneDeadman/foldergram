@@ -4,6 +4,7 @@ import {
   fetchSharedFolderAccess,
   fetchSharedFolderImages,
   fetchSharedImage,
+  fetchSharedPost,
   unlockSharedFolderLink,
   unlockSharedFolderPassword
 } from '../api/gallery';
@@ -130,13 +131,15 @@ export const useShareStore = defineStore('share', {
       }
     },
 
-    async loadImage(id: number, mediaType?: 'image' | 'video') {
+    async loadImage(id: number, mediaType?: 'image' | 'video', options: { legacyImageAlias?: boolean } = {}) {
       const requestToken = ++shareLoadToken;
       this.loading = true;
       this.error = null;
 
       try {
-        const image = await fetchSharedImage(id, mediaType);
+        const image = options.legacyImageAlias
+          ? await fetchSharedImage(id, mediaType)
+          : await fetchSharedPost(id, mediaType);
         if (requestToken !== shareLoadToken) {
           return;
         }

@@ -28,6 +28,7 @@ When password protection is enabled:
 - `/thumbnails/...` and `/previews/...` also require the same authenticated session unless public viewer mode is enabled
 - authenticated sessions carry `admin` or `viewer` role data
 - anonymous public reads use `role: "anonymous"` and `likesMode: "local"`
+- anonymous public JSON responses omit local media paths, post source paths, and EXIF metadata at every carousel-item depth; `folderPath` remains available for folder display and `carouselTitle` provides the safe child-folder label used for carousel caption fallback
 - admin-only mutations return `403` for viewer sessions
 
 The frontend sends same-origin credentials automatically and uses a signed
@@ -147,6 +148,7 @@ Notes:
 - `thumbnailUrl` points to `/thumbnails/...`.
 - `previewUrl` points to `/previews/...`.
 - feed items can include a nullable `caption`.
+- feed items representing carousel posts include `carouselTitle`, a display-safe child-folder label that remains available when anonymous-public responses omit `sourcePath`.
 
 ### `GET /api/feed/search`
 
@@ -387,11 +389,20 @@ The response shape contains the shared folder summary and a list of redacted ite
 
 Sensitive metadata including local folder paths, relative file paths, and EXIF metadata are omitted.
 
-### `GET /api/share/images/:id`
+### `GET /api/share/posts/:postId`
 
-Returns one shared post detail after checking access to that post's folder.
+Returns one shared post detail using the canonical `posts.id` namespace after
+checking access to that post's folder. Shared folder grids and carousel links
+use this route.
 
 Shared detail payloads do not expose original-file URLs (`originalUrl`) or local system paths. Only `thumbnailUrl` and `previewUrl` are provided, both pointing to guarded shared media endpoints.
+
+### `GET /api/share/images/:imageId`
+
+Historical compatibility alias. The value is interpreted only as an
+`images.id` and resolves through `post_items` to its owning post. Existing
+single-image shared links continue to work. New shared links should use
+`/api/share/posts/:postId`.
 
 ### `GET /api/share/images/:id/thumbnail`
 
@@ -672,7 +683,7 @@ Each trash item uses the normal feed-item shape plus `trashedAt`.
 That shared shape also includes the nullable `caption` field used by feed and
 viewer surfaces.
 
-### `GET /api/images/:id`
+### `GET /api/posts/:id`
 
 Query parameters:
 
@@ -690,14 +701,18 @@ Returns one post detail payload with:
 - `fileSize`
 - `originalUrl`
 - `playbackStrategy` for videos when an original MP4 is browser-compatible
+- `nextPostId`
+- `previousPostId`
 - `nextImageId`
 - `previousImageId`
 
-`nextImageId` and `previousImageId` are resolved within the same folder, the
-same active `mediaType` filter when one is supplied, and the current default
-folder image order from Settings.
+`nextPostId` and `previousPostId` are the canonical post-navigation fields.
+They are resolved within the same folder, the same active `mediaType` filter
+when one is supplied, and the current default folder image order from Settings.
+`nextImageId` and `previousImageId` are compatibility aliases with the same
+values.
 
-### `GET /api/images/:id/collections`
+### `GET /api/posts/:id/collections`
 
 Returns shared collection membership for one post.
 
@@ -773,7 +788,9 @@ Notable fields:
 | `preferences.defaultReelsFeedMode` | Current app-wide default reels mode used when `/reels` opens. |
 | `preferences.defaultFolderImageOrder` | Current app-wide default order used for folder grids and folder detail navigation. |
 | `preferences.treatStoriesAsFolders` | Whether folders literally named `stories` are treated as ordinary app folders instead of reserved story sources. |
+| `preferences.treatCarouselsAsFolders` | Whether folders literally named `carousels` are treated as ordinary app folders instead of reserved carousel sources. |
 | `storiesMigration` | Migration hint with `hasLegacyStoriesCandidates` and `decisionPending`. |
+| `carouselsMigration` | Carousel migration state with `hasLegacyCarouselsCandidates`, `decisionPending`, and `reconciliationPending`. The last field remains true until a successful full scan applies the saved Carousel folder mode. |
 
 ### `GET /api/scan-progress`
 
@@ -1168,7 +1185,7 @@ Notes:
 
 - `false` enables the default reserved-stories mode
 - `true` keeps `stories/` folders behaving like ordinary app folders
-- the Settings UI immediately follows this write with `POST /api/admin/rescan`, but this endpoint itself only saves the setting
+- this endpoint only saves the setting; use `POST /api/admin/rescan` afterward, or `POST /api/admin/rebuild-index` when `libraryIndex.rebuildRequired` is true
 
 ### `PUT /api/admin/settings/excluded-folders`
 
@@ -1410,7 +1427,7 @@ Success:
 }
 ```
 
-### `PATCH /api/images/:id/caption`
+### `PATCH /api/posts/:id/caption`
 
 Updates the custom caption for one visible post.
 
@@ -1442,7 +1459,7 @@ Success:
 `image` contains the updated post payload so the client can refresh loaded
 surfaces immediately.
 
-### `POST /api/images/:id/like`
+### `POST /api/posts/:id/like`
 
 Marks a post as liked.
 
@@ -1461,7 +1478,7 @@ Errors:
 - `404` with `{"message":"Image not found"}` when the post does not exist or is deleted
 - `403` when trust requirements are missing
 
-### `DELETE /api/images/:id/like`
+### `DELETE /api/posts/:id/like`
 
 Removes a like.
 
@@ -1475,7 +1492,7 @@ Success:
 }
 ```
 
-### `POST /api/images/:id/save`
+### `POST /api/posts/:id/save`
 
 Adds a post to the default saved collection.
 
@@ -1489,7 +1506,7 @@ Success:
 }
 ```
 
-### `DELETE /api/images/:id/save`
+### `DELETE /api/posts/:id/save`
 
 Removes a post from the default saved collection and clears any custom shared
 collection memberships for that post.
@@ -1548,7 +1565,7 @@ Deletes one shared custom collection.
 Deleting a custom collection does not unsave the underlying posts if they are
 still present in the default saved collection.
 
-### `POST /api/collections/:slug/images/:id`
+### `POST /api/collections/:slug/posts/:id`
 
 Adds a post to one shared collection.
 
@@ -1562,14 +1579,14 @@ Success:
 }
 ```
 
-### `DELETE /api/collections/:slug/images/:id`
+### `DELETE /api/collections/:slug/posts/:id`
 
 Removes a post from one shared collection.
 
 If the target collection is the default saved collection, the server clears all
 shared collection membership for that post.
 
-### `POST /api/images/:id/trash`
+### `POST /api/posts/:id/trash`
 
 Moves a post into Trash without removing the original file from disk.
 
@@ -1583,7 +1600,7 @@ Success:
 }
 ```
 
-### `POST /api/images/:id/restore`
+### `POST /api/posts/:id/restore`
 
 Restores a post from Trash.
 
@@ -1597,15 +1614,16 @@ Success:
 }
 ```
 
-### `DELETE /api/images/:id`
+### `DELETE /api/posts/:id`
 
-Permanently deletes:
+Permanently deletes every physical member of the post:
 
-- the source file from disk
-- its thumbnail derivative
-- its preview derivative
+- each source file from disk
+- each thumbnail derivative
+- each preview derivative
 
-Then it updates the index and folder avatar state.
+A single-item post has one member; a carousel has all of its ordered members
+removed. The endpoint then updates the index and folder avatar state.
 
 Success:
 
@@ -1766,3 +1784,31 @@ Those helpers are the best reference for current client-side usage, including:
 - default page sizes
 - when `mediaType` is sent
 - which routes are expected to return `items` arrays versus single objects
+
+## Post-oriented carousel API
+
+Feed and detail objects include `postType`, `itemCount`, ordered `mediaItems`, and a display-safe `carouselTitle`. Each member identifies its physical asset with `imageId`; original and derivative delivery remains asset-oriented. Canonical post routes are:
+
+- `GET /api/posts/:id`
+- `PATCH /api/posts/:id/caption`
+- `GET /api/posts/:id/collections`
+- `POST|DELETE /api/posts/:id/like`
+- `POST|DELETE /api/posts/:id/save`
+- `POST /api/posts/:id/trash` and `/restore`
+- `DELETE /api/posts/:id`
+- `GET /api/share/posts/:id`
+- `POST|DELETE /api/collections/:slug/posts/:id`
+
+- `POST /api/admin/settings/carousels-as-folders` (`{ treatCarouselsAsFolders: boolean }`)
+- `POST /api/admin/settings/carousels-migration-decision` (`{ decision: 'restore' | 'carousels' }`)
+
+Admin settings mutations for carousel mode store the mode and migration decision atomically, then return `200 OK` with updated `AppStats`. They do not start a library scan. Use `POST /api/admin/rescan` afterward to reindex folders and posts with the selected mode. When `libraryIndex.rebuildRequired` is true, use `POST /api/admin/rebuild-index` instead. Status keeps `carouselsMigration.reconciliationPending` true until a successful full scan records the selected mode as applied.
+
+The matching `/api/images/:id` routes remain compatibility aliases and interpret
+the number only as a physical `images.id`. They never fall back to a colliding
+post ID. `/post/:id` is canonical in the browser, while `/image/:id` remains an
+alias. Derivative routes remain image-oriented because they identify physical
+media assets. Status responses distinguish `indexedPosts`, `indexedMediaAssets`,
+`indexedCarousels`, and single-video `indexedVideos`; scan summaries may include
+`warning_count` and `warning_text`. Carousel mode and migration state are
+available in `preferences.treatCarouselsAsFolders` and `carouselsMigration`.

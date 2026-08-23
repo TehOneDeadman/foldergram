@@ -31,6 +31,7 @@ When enabled:
 - `/api` routes require that session, except for `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/unlock-admin`, `POST /api/auth/logout`, and the scoped `/api/share/...` routes
 - generated media under `/thumbnails` and `/previews` also require that session unless public viewer mode is enabled
 - in `viewer_access_mode=public`, safe read routes and generated media can be browsed anonymously
+- anonymous public JSON payloads omit local media paths, post source paths, and EXIF metadata, including nested carousel items
 - anonymous public favorites stay in the browser and never write into SQLite likes
 - authenticated API and media responses are marked `Cache-Control: no-store` and `Vary: Cookie`
 - the production service worker skips caching protected thumbnail and preview responses

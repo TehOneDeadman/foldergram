@@ -41,7 +41,8 @@ data/
 
 The important rule is simple:
 
-- A non-hidden folder becomes an indexed album only when it directly contains supported media.
+- A non-hidden folder becomes an indexed album when it directly contains supported media.
+- In reserved carousel mode, it can instead qualify when `carousels/` has an immediate child containing supported media directly; carousel-only albums do not need a placeholder file.
 - Nested folders become separate albums if they directly contain media.
 
 Optional: add folder stories and highlights with a reserved `stories/` folder:
@@ -148,7 +149,7 @@ an unlimited revocable link, or a reusable folder password. Shared visitors use
 
 Inside Settings:
 
-- `General Settings` contains stories mode, nested folder title format, excluded folders, Home/Reels defaults, and the default folder photo order
+- `General Settings` contains stories and carousel folder modes, nested folder title format, excluded folders, Home/Reels defaults, and the default folder photo order
 - `Places` contains offline place-data preparation and place-assignment rebuilds for GPS-tagged photos
 - `Scan & Library` contains manual scan plus rebuild actions
 
@@ -219,3 +220,7 @@ pnpm build:docs
 - Folder share links and folder passwords are read-only and scoped to one folder; they do not grant Settings, Home feed, Reels, Places, Likes, Collections, Trash, or original-file downloads.
 
 If nothing appears, start with [Troubleshooting](/troubleshooting).
+
+## Create a carousel post
+
+Create `AppFolder/carousels/Trip/`, add `01-arrival.jpg`, `02-clip.mp4`, and `03-sunset.jpg`, then run a scan. The child becomes one swipeable post in filename order. See [Carousel Posts](/carousel-posts) for limits and edge cases.

@@ -133,6 +133,53 @@ describe.sequential('folder customization scan behavior', () => {
     expect(rescannedFolder?.avatar_source).toBe('manual');
   });
 
+  it('preserves every manually selected carousel cover across rescans with or without a direct cover file', async () => {
+    maintenanceRepository.resetLibraryIndex();
+
+    for (const ownerPath of ['with-cover', 'without-cover']) {
+      await createSourceFile(`${ownerPath}/photo.jpg`);
+      if (ownerPath === 'with-cover') {
+        await createSourceFile(`${ownerPath}/cover.jpg`);
+      }
+      await createSourceFile(`${ownerPath}/carousels/trip/01.jpg`);
+      await createSourceFile(`${ownerPath}/carousels/trip/02.jpg`);
+      await createSourceFile(`${ownerPath}/carousels/trip/03.jpg`);
+    }
+
+    await scannerService.scanAll('manual');
+
+    for (const ownerPath of ['with-cover', 'without-cover']) {
+      const owner = folderRepository.getByFolderPath(ownerPath)!;
+      const carouselItems = [1, 2, 3].map((position) => (
+        imageRepository.getByRelativePath(`${ownerPath}/carousels/trip/0${position}.jpg`)!
+      ));
+
+      for (const item of carouselItems) {
+        expect(galleryService.setFolderAvatar(owner.slug, item.id)).toBe(true);
+        await scannerService.scanAll('manual');
+
+        const rescannedOwner = folderRepository.getById(owner.id);
+        expect(rescannedOwner?.avatar_image_id).toBe(item.id);
+        expect(rescannedOwner?.avatar_source).toBe('manual');
+        expect(galleryService.getFolderBySlug(owner.slug)).toMatchObject({
+          avatarImageId: item.id,
+          avatarUrl: expect.stringContaining(item.thumbnail_path.replaceAll('\\', '/'))
+        });
+        expect(galleryService.getFolderImages(owner.slug, 1, 10)?.folder).toMatchObject({
+          avatarImageId: item.id,
+          avatarUrl: expect.stringContaining(item.thumbnail_path.replaceAll('\\', '/'))
+        });
+        expect(galleryService.listFolders()).toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: owner.id, avatarImageId: item.id })
+        ]));
+      }
+
+      const staleSelection = carouselItems.at(-1)!;
+      imageRepository.markDeleted(staleSelection.relative_path);
+      expect(galleryService.getFolderBySlug(owner.slug)?.avatarImageId).not.toBe(staleSelection.id);
+    }
+  });
+
   it('preserves a custom caption across normal rescans', async () => {
     maintenanceRepository.resetLibraryIndex();
 
@@ -148,7 +195,7 @@ describe.sequential('folder customization scan behavior', () => {
     await createSourceFile('albums/photo-2.jpg');
     await scannerService.scanAll('manual');
 
-    expect(imageRepository.getById(image!.id)?.caption).toBe('Golden hour on the ridge');
+    expect(imageRepository.getById(image!.id)?.caption).toBeNull();
     expect(galleryService.getImageDetail(image!.id)?.caption).toBe('Golden hour on the ridge');
   });
 
@@ -178,7 +225,8 @@ describe.sequential('folder customization scan behavior', () => {
     const feedPayload = galleryService.getFeed(1, 24, 'recent');
     expect(feedPayload.items.map((item) => item.id)).not.toContain(coverImage!.id);
 
-    expect(galleryService.getImageDetail(coverImage!.id)?.id).toBe(coverImage!.id);
+    expect(galleryService.getImageDetail(coverImage!.id)).toBeNull();
+    expect(galleryService.getImageDetail(coverImage!.id, undefined, { isLegacyImageAlias: true })).toBeNull();
   });
 
   it('uses the saved app folder photo order for folder grids and detail navigation', async () => {

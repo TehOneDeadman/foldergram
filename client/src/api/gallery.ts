@@ -264,14 +264,22 @@ export function fetchSharedFolderImages(slug: string, page = 1, limit = 24, medi
   return requestJson<SharedFolderImagesPayload>(`/api/share/folders/${encodeURIComponent(slug)}/images?${params.toString()}`);
 }
 
-export function fetchSharedImage(id: number, mediaType?: 'image' | 'video') {
+function fetchSharedDetail(resource: 'posts' | 'images', id: number, mediaType?: 'image' | 'video') {
   const params = new URLSearchParams();
   if (mediaType) {
     params.set('mediaType', mediaType);
   }
 
   const suffix = params.size > 0 ? `?${params.toString()}` : '';
-  return requestJson<SharedImageDetail>(`/api/share/images/${id}${suffix}`);
+  return requestJson<SharedImageDetail>(`/api/share/${resource}/${id}${suffix}`);
+}
+
+export function fetchSharedPost(id: number, mediaType?: 'image' | 'video') {
+  return fetchSharedDetail('posts', id, mediaType);
+}
+
+export function fetchSharedImage(id: number, mediaType?: 'image' | 'video') {
+  return fetchSharedDetail('images', id, mediaType);
 }
 
 export function fetchImage(id: number, mediaType?: 'image' | 'video') {
@@ -281,11 +289,11 @@ export function fetchImage(id: number, mediaType?: 'image' | 'video') {
   }
 
   const suffix = params.size > 0 ? `?${params.toString()}` : '';
-  return requestJson<ImageDetail>(`/api/images/${id}${suffix}`);
+  return requestJson<ImageDetail>(`/api/posts/${id}${suffix}`);
 }
 
 export async function updateImageCaption(id: number, caption: string | null) {
-  const payload = await requestJson<ImageCaptionMutationResult>(`/api/images/${id}/caption`, {
+  const payload = await requestJson<ImageCaptionMutationResult>(`/api/posts/${id}/caption`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ caption })
@@ -329,7 +337,7 @@ export function fetchCollectionImages(slug: string, page = 1, limit = 24) {
 }
 
 export function fetchImageCollections(id: number) {
-  return requestJson<ImageCollectionsPayload>(`/api/images/${id}/collections`);
+  return requestJson<ImageCollectionsPayload>(`/api/posts/${id}/collections`);
 }
 
 export function fetchTrashImages(page = 1, limit = 24) {
@@ -337,55 +345,55 @@ export function fetchTrashImages(page = 1, limit = 24) {
 }
 
 export function likeImage(id: number) {
-  return requestJson<LikeMutationResult>(`/api/images/${id}/like`, {
+  return requestJson<LikeMutationResult>(`/api/posts/${id}/like`, {
     method: 'POST'
   });
 }
 
 export function unlikeImage(id: number) {
-  return requestJson<LikeMutationResult>(`/api/images/${id}/like`, {
+  return requestJson<LikeMutationResult>(`/api/posts/${id}/like`, {
     method: 'DELETE'
   });
 }
 
 export function saveImage(id: number) {
-  return requestJson<CollectionMutationResult>(`/api/images/${id}/save`, {
+  return requestJson<CollectionMutationResult>(`/api/posts/${id}/save`, {
     method: 'POST'
   });
 }
 
 export function unsaveImage(id: number) {
-  return requestJson<CollectionMutationResult>(`/api/images/${id}/save`, {
+  return requestJson<CollectionMutationResult>(`/api/posts/${id}/save`, {
     method: 'DELETE'
   });
 }
 
 export function addImageToCollection(slug: string, id: number) {
-  return requestJson<CollectionMutationResult>(`/api/collections/${encodeURIComponent(slug)}/images/${id}`, {
+  return requestJson<CollectionMutationResult>(`/api/collections/${encodeURIComponent(slug)}/posts/${id}`, {
     method: 'POST'
   });
 }
 
 export function removeImageFromCollection(slug: string, id: number) {
-  return requestJson<CollectionMutationResult>(`/api/collections/${encodeURIComponent(slug)}/images/${id}`, {
+  return requestJson<CollectionMutationResult>(`/api/collections/${encodeURIComponent(slug)}/posts/${id}`, {
     method: 'DELETE'
   });
 }
 
 export function trashImage(id: number) {
-  return requestJson<TrashImageResult>(`/api/images/${id}/trash`, {
+  return requestJson<TrashImageResult>(`/api/posts/${id}/trash`, {
     method: 'POST'
   });
 }
 
 export function restoreImage(id: number) {
-  return requestJson<RestoreImageResult>(`/api/images/${id}/restore`, {
+  return requestJson<RestoreImageResult>(`/api/posts/${id}/restore`, {
     method: 'POST'
   });
 }
 
 export function deleteImage(id: number) {
-  return requestJson<DeleteImageResult>(`/api/images/${id}`, {
+  return requestJson<DeleteImageResult>(`/api/posts/${id}`, {
     method: 'DELETE'
   });
 }
@@ -578,5 +586,21 @@ export function updateExcludedFolders(rules: string[]) {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ rules })
+  });
+}
+
+export function updateCarouselsMode(treatCarouselsAsFolders: boolean) {
+  return requestJson<AppStats>('/api/admin/settings/carousels-as-folders', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ treatCarouselsAsFolders })
+  });
+}
+
+export function updateCarouselsMigrationDecision(decision: 'restore' | 'carousels') {
+  return requestJson<AppStats>('/api/admin/settings/carousels-migration-decision', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ decision })
   });
 }

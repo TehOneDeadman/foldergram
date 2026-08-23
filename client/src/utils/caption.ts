@@ -6,9 +6,23 @@ export function readableFilename(filename: string): string {
     .trim();
 }
 
-export function resolveDisplayCaption(item: { filename: string; caption?: string | null }): string {
+export function resolveDisplayCaption(item: {
+  filename: string;
+  caption?: string | null;
+  postType?: string;
+  sourcePath?: string;
+  carouselTitle?: string | null;
+}): string {
   if (typeof item.caption === 'string' && item.caption.trim().length > 0) {
     return item.caption;
+  }
+
+  if (item.postType === 'carousel') {
+    const fallback = item.carouselTitle
+      ?? (item.sourcePath ? item.sourcePath.replaceAll('\\', '/').split('/').at(-1) : null);
+    if (fallback) {
+      return readableFilename(fallback);
+    }
   }
 
   return readableFilename(item.filename);

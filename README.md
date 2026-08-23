@@ -44,7 +44,7 @@ Generated derivatives are now stored under stable asset-key shards instead of mi
 - Image and video support with configurable eager or lazy derivative generation for fast browsing.
 - Original-media download controls on home feed cards, post detail, and stories, alongside open-original actions.
 - Optional role-based local access with admin, viewer, and public browse modes.
-- Settings split into `General Settings` for Home/Reels defaults, language selection, stories mode, and excluded folders, plus `Scan & Library` for scan and rebuild actions.
+- Settings split into `General Settings` for Home/Reels defaults, language selection, stories and carousel folder modes, and excluded folders, plus `Scan & Library` for scan and rebuild actions.
 - Phase-aware scan progress for first indexing, derivative migration, and rebuilds.
 - A web app manifest plus production service worker registration.
 - A debounced filesystem watcher in development mode only.
@@ -54,8 +54,8 @@ Generated derivatives are now stored under stable asset-key shards instead of mi
 
 Foldergram maps directly to your filesystem:
 
-1. **App Folders:** Any non-hidden folder under `GALLERY_ROOT` that directly contains supported media becomes one indexed App Folder.
-2. **Posts:** Each supported image or video directly inside that folder becomes one indexed post.
+1. **App Folders:** Any non-hidden folder under `GALLERY_ROOT` that directly contains supported media becomes one indexed App Folder. In reserved carousel mode, a folder also qualifies when its `carousels/` directory has an immediate child containing supported media directly.
+2. **Posts:** Each supported image or video directly inside an App Folder becomes one indexed post. Media in `AppFolder/carousels/Post name/` is grouped into a carousel post in reserved mode.
 3. **Nested folders stay separate:** Nested local folders are not merged into their parent App Folder. If a nested folder directly contains supported media, it becomes its own App Folder with parent folder name in the route (e.g. /folder/parent-nested).
 4. **Root files are ignored:** Files placed directly in `GALLERY_ROOT` are ignored.
 
@@ -278,9 +278,9 @@ not read directly by the container.
 - Use `GALLERY_EXCLUDED_FOLDERS` to skip unwanted source folders during discovery and rescans.
 - Rules without a slash match a folder name anywhere in the gallery tree, such as `@eaDir` or `thumbnails`.
 - Rules with a slash match one exact relative folder path beneath `GALLERY_ROOT`, such as `Archive/cache`.
-- The Settings sidebar now separates app-wide preferences into `General Settings`. That section includes the instant language selector plus saved app-language default, the stories-folders toggle, Home/Reels defaults, and the excluded-folder editor.
+- The Settings sidebar separates app-wide preferences into `General Settings`. That section includes the instant language selector plus saved app-language default, stories and carousel folder modes, Home/Reels defaults, and the excluded-folder editor.
 - `General Settings` can add or remove custom exclusion rules at runtime. Env-backed rules stay read-only there and still require a restart to change.
-- After changing excluded folders or stories mode in `General Settings`, run a full library scan from `Scan & Library` so previously indexed folders are soft-removed or reclassified correctly.
+- After changing excluded folders, stories mode, or carousel mode in `General Settings`, follow the action shown in `Scan & Library` so indexed folders and posts are classified correctly. Run a full scan normally; use the index rebuild when the gallery location requires one.
 
 ### Detail Media and Derivative Timing
 
@@ -380,3 +380,9 @@ Foldergram welcomes small, clearly aligned pull requests for bug fixes, document
 Before working on major features, architectural changes, or changes to core behavior such as scanning, indexing, routing, auth or access flow, and storage strategy, open an issue or discussion first. Pull requests for large changes that were not discussed in advance will not be accepted.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution policy, local setup notes, branch naming guidance, and pull request expectations.
+
+## Carousel posts
+
+Foldergram supports one post containing 2–20 ordered images, animated images, and videos. Put each post in `AppFolder/carousels/Post name/`; filename order controls its slides and the first item is its cover. A carousel counts as one post, has one caption, and its videos are excluded from Reels. The index stores visible posts separately from physical media through `posts` and `post_items`.
+
+See [Posts with Multiple Photos or Videos](docs/carousel-posts.md) for the complete source tree, edge cases, settings, and troubleshooting guide.

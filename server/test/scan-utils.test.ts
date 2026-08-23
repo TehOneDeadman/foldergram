@@ -145,3 +145,42 @@ describe('unchanged image refresh decisions', () => {
     ).toBe(false);
   });
 });
+
+describe('compareNaturalFilename (Issue 12)', () => {
+  it('correctly sorts numeric numbers naturally', async () => {
+    const { compareNaturalFilename } = await import('../src/utils/scan-utils.js');
+    const files = ['file10.jpg', 'file2.jpg', 'file1.jpg', 'file20.jpg'];
+    files.sort(compareNaturalFilename);
+    expect(files).toEqual(['file1.jpg', 'file2.jpg', 'file10.jpg', 'file20.jpg']);
+  });
+
+  it('deterministically breaks ties for case variants across permutations', async () => {
+    const { compareNaturalFilename } = await import('../src/utils/scan-utils.js');
+    const list1 = ['a.jpg', 'A.jpg', 'b.jpg', 'B.jpg'];
+    const list2 = ['B.jpg', 'b.jpg', 'A.jpg', 'a.jpg'];
+    list1.sort(compareNaturalFilename);
+    list2.sort(compareNaturalFilename);
+    expect(list1).toEqual(list2);
+  });
+
+  it('deterministically sorts composed and decomposed unicode accents', async () => {
+    const { compareNaturalFilename } = await import('../src/utils/scan-utils.js');
+    const composed = 'r\u00e9sum\u00e9.jpg';
+    const decomposed = 're\u0301sume\u0301.jpg';
+    const list = [decomposed, composed, 'resume.jpg'];
+    list.sort(compareNaturalFilename);
+    expect(list[0]).toBe('resume.jpg');
+    const sorted1 = [decomposed, composed].sort(compareNaturalFilename);
+    const sorted2 = [composed, decomposed].sort(compareNaturalFilename);
+    expect(sorted1).toEqual(sorted2);
+  });
+
+  it('deterministically handles numeric zero-padding variants', async () => {
+    const { compareNaturalFilename } = await import('../src/utils/scan-utils.js');
+    const list1 = ['01.jpg', '1.jpg', '001.jpg'];
+    const list2 = ['1.jpg', '001.jpg', '01.jpg'];
+    list1.sort(compareNaturalFilename);
+    list2.sort(compareNaturalFilename);
+    expect(list1).toEqual(list2);
+  });
+});

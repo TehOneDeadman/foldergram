@@ -132,7 +132,18 @@
         @pointermove="handleMediaPointermove"
         @pointerup="handleMediaPointerup"
       >
-        <template v-if="image.mediaType === 'video'">
+        <CarouselMediaStage
+          v-if="isCarousel"
+          v-model="carouselIndex"
+          class="viewer__media-shell"
+          :items="image.mediaItems!"
+          prefer-preview
+          :retry-while="appStore.isScanning"
+          loading="eager"
+          :muted="appStore.videoMuted"
+          autoplay
+        />
+        <template v-else-if="image.mediaType === 'video'">
           <div
             class="viewer__media-shell viewer__media-shell--video viewer__media-shell--video-interactive"
             :style="mediaShellStyle"
@@ -360,7 +371,7 @@
               {{ t('post.viewer.stats.dimensions') }}
             </dt>
             <dd class="viewer__sidebar-stat-value m-0 text-[0.96rem] font-semibold">
-              {{ image.width }} × {{ image.height }}
+              {{ activeMediaWidth }} × {{ activeMediaHeight }}
             </dd>
           </div>
           <div class="viewer__sidebar-stat">
@@ -372,7 +383,7 @@
             </dd>
           </div>
           <div
-            v-if="image.durationMs"
+            v-if="activeMediaDurationMs"
             class="viewer__sidebar-stat"
           >
             <dt class="viewer__sidebar-stat-label">
@@ -565,7 +576,7 @@
     <Teleport to="body">
       <PostCaptionModal
         v-if="isEditingCaption && image"
-        :filename="image.filename"
+        :filename="captionFallbackFilename"
         :caption="image.caption"
         :error="captionError"
         :loading="captionSaving"
@@ -596,6 +607,7 @@
   import { formatFolderTitle } from "../utils/folder-titles"
   import { getOriginalMediaDownloadUrl, getOriginalMediaUrl } from "../utils/original-media"
   import Avatar from "./Avatar.vue"
+  import CarouselMediaStage from "./CarouselMediaStage.vue"
   import CollectionBookmark from "./CollectionBookmark.vue"
   import PostCaptionModal from "./PostCaptionModal.vue"
   import ResilientImage from "./ResilientImage.vue"
@@ -637,6 +649,7 @@
   const sidebarSheetDragOffset = ref(0)
   const settingCover = ref(false)
   const isEditingCaption = ref(false)
+  const carouselIndex = ref(0)
   const {
     saving: captionSaving,
     error: captionError,
@@ -646,8 +659,23 @@
 
   const WHEEL_NAVIGATION_THRESHOLD = 72
   const NAVIGATION_COOLDOWN_MS = 320
-  const originalMediaUrl = computed(() => (props.image ? getOriginalMediaUrl(props.image.id) : ""))
-  const downloadOriginalMediaUrl = computed(() => (props.image ? getOriginalMediaDownloadUrl(props.image.id) : ""))
+  const isCarousel = computed(() => props.image?.postType === 'carousel' && (props.image.mediaItems?.length ?? 0) > 1)
+  const activeMediaItem = computed(() => isCarousel.value ? props.image?.mediaItems?.[carouselIndex.value] ?? null : null)
+  const activeMediaImageId = computed(() => activeMediaItem.value?.imageId ?? props.image?.id ?? null)
+  const activeMediaWidth = computed(() => activeMediaItem.value?.width ?? props.image?.width ?? 0)
+  const activeMediaHeight = computed(() => activeMediaItem.value?.height ?? props.image?.height ?? 0)
+  const activeMediaDurationMs = computed(() => activeMediaItem.value?.durationMs ?? props.image?.durationMs ?? null)
+  const captionFallbackFilename = computed(() => {
+    if (props.image?.postType === 'carousel' && props.image.carouselTitle) {
+      return props.image.carouselTitle
+    }
+    if (props.image?.postType === 'carousel' && props.image.sourcePath) {
+      return props.image.sourcePath.replaceAll('\\', '/').split('/').at(-1) ?? props.image.filename
+    }
+    return props.image?.filename ?? ''
+  })
+  const originalMediaUrl = computed(() => activeMediaItem.value?.originalUrl ?? (activeMediaImageId.value ? getOriginalMediaUrl(activeMediaImageId.value) : ""))
+  const downloadOriginalMediaUrl = computed(() => activeMediaImageId.value ? getOriginalMediaDownloadUrl(activeMediaImageId.value) : "")
   const MODAL_SIDEBAR_COLLAPSE_BREAKPOINT = 960
   const SHEET_SWIPE_MIN_DISTANCE = 56
   const SHEET_SWIPE_MAX_HORIZONTAL_DISTANCE = 96
@@ -678,7 +706,7 @@
       return ""
     }
 
-    const megabytes = props.image.fileSize / (1024 * 1024)
+    const megabytes = (activeMediaItem.value?.fileSize ?? props.image.fileSize) / (1024 * 1024)
     return `${megabytes.toFixed(2)} MB`
   })
 
@@ -730,6 +758,10 @@
     }
   })
 
+  watch(() => props.image?.id, () => {
+    carouselIndex.value = 0
+  })
+
   const locallySetCover = ref(false)
 
   const isCurrentCover = computed(() => {
@@ -737,11 +769,11 @@
     if (!props.image) return false;
 
     if ('folderAvatarImageId' in props.image && typeof props.image.folderAvatarImageId === 'number') {
-      return props.image.id === props.image.folderAvatarImageId;
+      return activeMediaImageId.value === props.image.folderAvatarImageId;
     }
 
     if (foldersStore.currentFolder?.avatarUrl) {
-      return foldersStore.currentFolder.avatarUrl.includes(`/api/images/${props.image.id}/`);
+      return Boolean(activeMediaImageId.value && foldersStore.currentFolder.avatarUrl.includes(`/api/images/${activeMediaImageId.value}/`));
     }
 
     return false;
@@ -760,9 +792,11 @@
       return ""
     }
 
-    return props.image.mediaType === "video"
-      ? t('post.viewer.videoType', { mimeType: props.image.mimeType })
-      : props.image.mimeType
+    const mediaType = activeMediaItem.value?.mediaType ?? props.image.mediaType
+    const mimeType = activeMediaItem.value?.mimeType ?? props.image.mimeType
+    return mediaType === "video"
+      ? t('post.viewer.videoType', { mimeType })
+      : mimeType
   })
   const formattedDate = computed(() =>
     props.image
@@ -776,10 +810,10 @@
       : "",
   )
   const formattedDuration = computed(() =>
-    formatMediaDuration(props.image?.durationMs),
+    formatMediaDuration(activeMediaDurationMs.value),
   )
   const exifDetails = computed<MetadataDetail[]>(() => {
-    const exif = props.image?.exif
+    const exif = activeMediaItem.value?.exif ?? props.image?.exif
     if (!exif) {
       return []
     }
@@ -1224,21 +1258,25 @@
   }
 
   function handleMediaPointerdown(event: PointerEvent) {
+    if (isCarousel.value) return
     swipeNavigation.onPointerdown(event)
     handleMediaSheetRevealPointerdown(event)
   }
 
   function handleMediaPointermove(event: PointerEvent) {
+    if (isCarousel.value) return
     swipeNavigation.onPointermove(event)
     handleMediaSheetRevealPointermove(event)
   }
 
   async function handleMediaPointerup(event: PointerEvent) {
+    if (isCarousel.value) return
     await swipeNavigation.onPointerup(event)
     await handleMediaSheetRevealPointerup(event)
   }
 
   function handleMediaPointercancel(event: PointerEvent) {
+    if (isCarousel.value) return
     swipeNavigation.onPointercancel()
     handleMediaSheetRevealPointercancel(event)
   }
@@ -1668,7 +1706,7 @@
       return
     }
 
-    if (isEditingCaption.value) {
+    if (isEditingCaption.value || isGestureIgnoredTarget(event.target)) {
       return
     }
 
@@ -1741,7 +1779,7 @@
     if (!props.image || settingCover.value) return;
     try {
       settingCover.value = true;
-      await foldersStore.setFolderCover(props.image.folderSlug, props.image.id);
+      await foldersStore.setFolderCover(props.image.folderSlug, activeMediaImageId.value ?? props.image.id);
       locallySetCover.value = true;
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to set cover');

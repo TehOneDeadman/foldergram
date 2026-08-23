@@ -149,6 +149,15 @@ export const router = createRouter({
       }
     },
     {
+      path: '/share/:slug/posts/:id',
+      name: 'shared-post',
+      component: SharedPostView,
+      props: true,
+      meta: {
+        publicShare: true
+      }
+    },
+    {
       path: '/share/:slug/images/:id',
       name: 'shared-image',
       component: SharedPostView,

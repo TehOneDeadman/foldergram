@@ -53,6 +53,12 @@ Fresh installs create the database from the baseline migration. Existing
 supported installs are baselined once on upgrade, so later releases can apply
 ordered schema changes automatically.
 
+Startup also validates the schema behind recorded folder-sharing and posts
+migrations. If an earlier startup recorded one of those migrations before its
+schema work began, Foldergram safely clears that incomplete marker and resumes
+the ordered migration. If a schema is only partially transformed or contains
+new data that cannot be rolled back safely, startup stops instead of guessing.
+
 For source installs, use `pnpm migrate` if you want to apply pending
 migrations without starting the rest of the app.
 
@@ -138,7 +144,7 @@ Behavior:
 The Settings sidebar is split into:
 
 - `Scan & Library` for manual scans, thumbnail rebuilds, and library-index rebuilds
-- `General Settings` for Home/Reels defaults, default folder order, nested folder title format, stories-folders mode, excluded folders, and any save-and-rescan notices tied to those app-wide rules
+- `General Settings` for Home/Reels defaults, default folder order, nested folder title format, stories and carousel folder modes, excluded folders, and save-and-scan notices tied to those app-wide rules
 - `Places` for offline GeoNames preparation status and place-assignment rebuilds
 - `Security & Access` for admin, viewer, and public-mode controls
 - `System Status` for storage, index, and last-scan details
@@ -228,7 +234,7 @@ Behavior:
 - In `DERIVATIVE_MODE=lazy`, neither a normal scan nor `Rebuild Library Index` pre-generates missing thumbnails or previews.
 - `Regenerate Thumbnails` remains a manual thumbnail and video-poster rebuild only. It does not rebuild previews.
 - When `SCAN_MEDIA_ERROR_MODE=skip` records media failures, the admin Settings view shows the full report path for that scan.
-- Runtime-only app-wide controls such as stories mode and excluded folders live under `Settings -> General Settings`, while the scan and rebuild actions live under `Settings -> Scan & Library`.
+- Runtime-only app-wide controls such as stories mode, carousel mode, and excluded folders live under `Settings -> General Settings`, while scan and rebuild actions live under `Settings -> Scan & Library`.
 
 ## Derivative layout upgrade
 
@@ -308,7 +314,10 @@ Practical guidance:
 
 Foldergram ignores files placed directly in `GALLERY_ROOT`.
 
-It indexes only folders that directly contain supported media:
+It indexes ordinary folders that directly contain supported media. In the
+default reserved-carousel mode, an App Folder can also qualify when its
+`carousels/` directory has an immediate child containing supported media
+directly, so carousel-only App Folders do not need a placeholder file:
 
 ```text
 gallery/
@@ -368,3 +377,7 @@ The current and previous gallery roots remain exposed only in
 `GET /api/admin/stats`. Admin-only live scan file and folder detail is available
 from `GET /api/admin/scan-progress` and from the `scan` field in
 `GET /api/admin/stats`.
+
+## Carousel-folder mode
+
+The SQLite setting `library.treat_carousels_as_folders` controls folders named `carousels`. Its default `false` value reserves `AppFolder/carousels/<post>/` for multi-item posts. Enable **Treat carousels folders as normal app folders** from **Settings → General Settings** to index those paths as ordinary folders instead. When no indexed path conflicts with the reserved name, Settings can show a dismissible Carousel Posts introduction with an expandable folder example. Existing path collisions produce a migration decision card that remains available until a mode is saved. Settings shows a pending update until a successful full scan has applied the saved mode. Use **Scan Library** under normal conditions, or **Rebuild Library Index** when the gallery location requires a new index. There is no `.env` equivalent.

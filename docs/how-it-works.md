@@ -311,3 +311,9 @@ Once data is indexed:
 - moments, highlights, and folder stories read from SQLite
 - thumbnails and previews are served as static files
 - originals are served by image ID only
+
+## Posts and carousel discovery
+
+Visible items are represented by `posts`; ordered physical membership lives in `post_items`. Ordinary media has one member, while `AppFolder/carousels/Post name/` can have up to 20. Runtime pages query posts first and hydrate each page's members in one batch. Post IDs, captions, likes, saved state, trash state, and sort timestamps stay stable when carousel files reorder.
+
+In reserved mode, a folder can qualify as an App Folder solely through a valid immediate carousel child. Folder counts count posts, and Reels queries require a single-item video post, so videos inside real carousels are excluded.

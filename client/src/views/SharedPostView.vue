@@ -15,7 +15,7 @@
         <RouterLink
           v-if="shareStore.image.previousImageId"
           class="shared-post-nav shared-post-nav--previous"
-          :to="{ name: 'shared-image', params: { slug, id: String(shareStore.image.previousImageId) } }"
+          :to="{ name: 'shared-post', params: { slug, id: String(shareStore.image.previousImageId) } }"
           :aria-label="t('post.viewer.previous')"
         >
           <span class="i-fluent-chevron-left-20-regular h-5 w-5" aria-hidden="true" />
@@ -23,7 +23,7 @@
         <RouterLink
           v-if="shareStore.image.nextImageId"
           class="shared-post-nav shared-post-nav--next"
-          :to="{ name: 'shared-image', params: { slug, id: String(shareStore.image.nextImageId) } }"
+          :to="{ name: 'shared-post', params: { slug, id: String(shareStore.image.nextImageId) } }"
           :aria-label="t('post.viewer.next')"
         >
           <span class="i-fluent-chevron-right-20-regular h-5 w-5" aria-hidden="true" />
@@ -31,8 +31,16 @@
 
         <article class="grid overflow-hidden rounded-[1rem] border border-border bg-surface shadow-[var(--shadow)] lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div class="grid min-h-[24rem] place-items-center bg-black">
+            <CarouselMediaStage
+              v-if="isCarousel"
+              v-model="carouselIndex"
+              class="max-h-[78vh] w-full"
+              :items="shareStore.image.mediaItems!"
+              prefer-preview
+              loading="eager"
+            />
             <video
-              v-if="shareStore.image.mediaType === 'video'"
+              v-else-if="shareStore.image.mediaType === 'video'"
               class="max-h-[78vh] w-full bg-black"
               :src="shareStore.image.previewUrl"
               :poster="shareStore.image.thumbnailUrl"
@@ -49,20 +57,20 @@
           <aside class="grid content-start gap-4 p-5">
             <div class="grid gap-1">
               <h1 class="m-0 text-[1.05rem] font-semibold tracking-[-0.02em]">{{ shareStore.image.folderName }}</h1>
-              <p class="m-0 break-words text-[0.9rem] text-muted">{{ shareStore.image.caption || shareStore.image.filename }}</p>
+              <p class="m-0 break-words text-[0.9rem] text-muted">{{ resolveDisplayCaption(shareStore.image) }}</p>
             </div>
             <dl class="grid gap-3 text-[0.88rem]">
               <div class="grid gap-1">
                 <dt class="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-muted">{{ t('post.viewer.stats.dimensions') }}</dt>
-                <dd class="m-0 font-semibold">{{ shareStore.image.width }} x {{ shareStore.image.height }}</dd>
+                <dd class="m-0 font-semibold">{{ activeMedia?.width ?? shareStore.image.width }} x {{ activeMedia?.height ?? shareStore.image.height }}</dd>
               </div>
-              <div v-if="shareStore.image.durationMs" class="grid gap-1">
+              <div v-if="activeMedia?.durationMs ?? shareStore.image.durationMs" class="grid gap-1">
                 <dt class="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-muted">{{ t('post.viewer.stats.duration') }}</dt>
-                <dd class="m-0 font-semibold">{{ formatMediaDuration(shareStore.image.durationMs) }}</dd>
+                <dd class="m-0 font-semibold">{{ formatMediaDuration(activeMedia?.durationMs ?? shareStore.image.durationMs) }}</dd>
               </div>
               <div class="grid gap-1">
                 <dt class="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-muted">{{ t('post.viewer.stats.type') }}</dt>
-                <dd class="m-0 font-semibold">{{ shareStore.image.mimeType }}</dd>
+                <dd class="m-0 font-semibold">{{ activeMedia?.mimeType ?? shareStore.image.mimeType }}</dd>
               </div>
             </dl>
           </aside>
@@ -77,13 +85,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
 
 import ErrorState from '../components/ErrorState.vue';
+import CarouselMediaStage from '../components/CarouselMediaStage.vue';
 import ResilientImage from '../components/ResilientImage.vue';
 import { useShareStore } from '../stores/share';
+import { resolveDisplayCaption } from '../utils/caption';
 import { formatMediaDuration } from '../utils/media';
 
 const props = defineProps<{
@@ -92,12 +102,17 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const route = useRoute();
 const shareStore = useShareStore();
 const imageId = computed(() => Number(props.id));
+const carouselIndex = ref(0);
+const isCarousel = computed(() => shareStore.image?.postType === 'carousel' && (shareStore.image.mediaItems?.length ?? 0) > 1);
+const activeMedia = computed(() => isCarousel.value ? shareStore.image?.mediaItems?.[carouselIndex.value] ?? null : null);
 
 async function loadImage() {
+  carouselIndex.value = 0;
   if (Number.isFinite(imageId.value)) {
-    await shareStore.loadImage(imageId.value);
+    await shareStore.loadImage(imageId.value, undefined, { legacyImageAlias: route.name === 'shared-image' });
   }
 }
 

@@ -55,7 +55,18 @@
       </button>
     </div>
 
-    <RouterLink v-if="!isHomeContext" custom :to="imageRoute" v-slot="{ href, navigate }">
+    <CarouselMediaStage
+      v-if="isCarousel"
+      v-model="carouselIndex"
+      class="rounded-[0.5rem] border border-border"
+      :items="item.mediaItems!"
+      :prefer-preview="isHomeContext"
+      :retry-while="appStore.isScanning"
+      :loading="isHomeContext ? 'eager' : 'lazy'"
+      :muted="appStore.videoMuted"
+    />
+
+    <RouterLink v-else-if="!isHomeContext" custom :to="imageRoute" v-slot="{ href, navigate }">
       <a
         :href="href"
         class="relative block overflow-hidden rounded-[0.5rem] border border-border bg-surface-alt"
@@ -439,6 +450,7 @@ import { formatMediaDuration, formatVideoTimestamp } from '../utils/media';
 import { resolveFeedAspectRatio } from '../utils/media-layout';
 import { getOriginalMediaDownloadUrl, getOriginalMediaUrl } from '../utils/original-media';
 import Avatar from './Avatar.vue';
+import CarouselMediaStage from './CarouselMediaStage.vue';
 import CollectionBookmark from './CollectionBookmark.vue';
 import ConfirmDialog from './ConfirmDialog.vue';
 import PostCaptionModal from './PostCaptionModal.vue';
@@ -497,6 +509,7 @@ const homeVideoDurationMs = ref(props.item.durationMs ?? 0);
 const homeVideoCurrentTimeMs = ref(0);
 const lastHomeImageTapAt = ref(0);
 const heartBurstEl = ref<HTMLElement | null>(null);
+const carouselIndex = ref(0);
 
 let homeImageTapResetTimer: ReturnType<typeof setTimeout> | null = null;
 let homeVideoObserver: IntersectionObserver | null = null;
@@ -516,6 +529,7 @@ const imageRoute = computed(() => ({
   query: route.query
 }));
 const isHomeContext = computed(() => props.context === 'home');
+const isCarousel = computed(() => props.item.postType === 'carousel' && (props.item.mediaItems?.length ?? 0) > 1);
 const showHomeStoryAvatar = computed(() => isHomeContext.value && props.hasAvatarStory);
 const shouldOpenPostInModal = computed(() => props.context !== 'home');
 const displayFolderTitle = computed(() => formatFolderTitle(props.item, appStore.nestedFolderTitleFormat));
@@ -537,8 +551,11 @@ const formattedDuration = computed(() => formatMediaDuration(props.item.duration
 const mediaAspectRatio = computed(() => resolveFeedAspectRatio(props.item.width, props.item.height));
 const homeVideoAspectRatio = computed(() => loadedHomeVideoAspectRatio.value ?? mediaAspectRatio.value);
 const homeImageSrc = computed(() => (props.item.isAnimated ? props.item.previewUrl : props.item.thumbnailUrl));
-const originalMediaUrl = computed(() => getOriginalMediaUrl(props.item.id));
-const downloadOriginalMediaUrl = computed(() => getOriginalMediaDownloadUrl(props.item.id));
+const activeMediaImageId = computed(() =>
+  isCarousel.value ? props.item.mediaItems?.[carouselIndex.value]?.imageId ?? props.item.id : props.item.id
+);
+const originalMediaUrl = computed(() => getOriginalMediaUrl(activeMediaImageId.value));
+const downloadOriginalMediaUrl = computed(() => getOriginalMediaDownloadUrl(activeMediaImageId.value));
 const homeVideoSource = computed<PlayerSrc>(() => ({
   src: props.item.previewUrl,
   type: 'video/mp4'

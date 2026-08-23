@@ -63,7 +63,7 @@ features:
 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
 </div>
 <h3>How indexing works</h3>
-<p>Foldergram walks <code>GALLERY_ROOT</code> recursively, skipping hidden paths. Any folder that directly contains supported media becomes an indexed album. Files at the gallery root and nested folders each become their own album.</p>
+<p>Foldergram walks <code>GALLERY_ROOT</code> recursively, skipping hidden paths. Files directly at the gallery root are ignored, while ordinary nested folders that directly contain supported media become separate albums. In the default reserved modes, <code>stories/</code> descendants provide stories and highlights, and media in <code>carousels/Post name/</code> becomes a post in its owning App Folder instead of making those reserved descendants separate albums; a valid carousel child can also qualify a carousel-only owner as an App Folder.</p>
 </div>
 
 <div class="cs-feature">
@@ -91,7 +91,7 @@ features:
 <div class="cs-feature">
 <div class="cs-feature-step">1</div>
 <h3>Discover folders</h3>
-<p>Walk the gallery tree, skip hidden paths, and collect every non-hidden folder that directly contains supported media files.</p>
+<p>Walk the gallery tree, skip hidden paths, and collect every non-hidden folder that directly contains supported media files. In reserved carousel mode, a folder also qualifies when its <code>carousels/</code> directory has an immediate child containing supported media directly.</p>
 </div>
 
 <div class="cs-feature">
@@ -121,7 +121,7 @@ features:
 <div class="cs-feature">
 <div class="cs-feature-step">6</div>
 <h3>Maintain locally</h3>
-<p>Admins manage Home, Reels, and folder-order defaults, stories mode, excluded folders, and Places preparation from Settings, then run scans or rebuilds locally. All controls stay on disk and on-device.</p>
+<p>Admins manage Home, Reels, and folder-order defaults, stories and carousel folder modes, excluded folders, and Places preparation from Settings, then run scans or rebuilds locally. All controls stay on disk and on-device.</p>
 </div>
 
 </div>

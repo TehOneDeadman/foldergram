@@ -44,6 +44,15 @@
     </section>
 
     <section
+      v-if="showScanWarningNotice"
+      class="card grid gap-[0.45rem] px-5 py-4 border-[color-mix(in_srgb,#d2a133_35%,var(--border)_65%)]"
+    >
+      <span class="eyebrow text-[#9f6a00]">{{ t('settings.notices.scanWarning.eyebrow') }}</span>
+      <h2 class="m-0 text-[1rem]">{{ t('settings.notices.scanWarning.title', { count: lastCompletedScan?.warning_count ?? 0 }) }}</h2>
+      <p class="m-0 whitespace-pre-line text-[0.84rem] leading-[1.5] text-muted">{{ lastCompletedScan?.warning_text }}</p>
+    </section>
+
+    <section
       v-if="showIgnoredRootMediaNotice"
       class="card flex items-center justify-between gap-3 px-4 py-3 border-[color-mix(in_srgb,var(--border)_82%,#d2a133_18%)]"
       style="background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 97%, #fff9ea 3%) 0%, color-mix(in srgb, var(--surface) 94%, #fff3d8 6%) 100%);"
@@ -467,6 +476,75 @@
 
         <!-- CATEGORY: GENERAL -->
         <template v-if="currentCategory === 'general'">
+          <section
+            v-if="showCarouselsMigrationNotice"
+            class="card grid gap-[1rem] p-6 border-[color-mix(in_srgb,#d2a133_42%,var(--border)_58%)]"
+            style="background: radial-gradient(circle at top right, rgba(210,161,51,0.18), transparent 40%), linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, #fff3cf 6%) 0%, color-mix(in srgb, var(--surface) 88%, #ffe6a6 12%) 100%);"
+          >
+            <div class="grid gap-[0.3rem]">
+              <span class="eyebrow text-[#9f6a00]">{{ t('settings.general.carouselsMigration.eyebrow') }}</span>
+              <h2 class="m-0 text-[1.1rem]">{{ t('settings.general.carouselsMigration.title') }}</h2>
+              <p class="m-0 text-muted">{{ t('settings.general.carouselsMigration.description') }}</p>
+            </div>
+            <div class="flex flex-col md:flex-row items-center gap-3 max-sm:items-stretch">
+              <button class="btn-primary min-w-[13rem]" type="button" :disabled="savingGeneralSettings" @click="chooseCarouselsMigrationMode(false)">
+                {{ t('settings.general.carouselsMigration.useFeature') }}
+              </button>
+              <button class="inline-flex min-h-11 items-center justify-center rounded-[0.95rem] border border-border bg-transparent px-4 text-[0.92rem] font-semibold text-text" type="button" :disabled="savingGeneralSettings" @click="chooseCarouselsMigrationMode(true)">
+                {{ t('settings.general.carouselsMigration.keepFolders') }}
+              </button>
+            </div>
+            <p class="m-0 text-muted">{{ t('settings.general.carouselsMigration.helper') }}</p>
+          </section>
+
+          <section
+            v-else-if="showCarouselsAnnouncementCard"
+            class="card grid gap-[1rem] border-[color-mix(in_srgb,var(--border)_84%,#8cc8ff_16%)] p-6"
+            style="background: linear-gradient(135deg, color-mix(in srgb, var(--surface) 97%, #f7fbff 3%) 0%, color-mix(in srgb, var(--surface) 93%, #e6f3ff 7%) 100%);"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div class="grid gap-[0.3rem]">
+                <div class="flex items-center gap-2">
+                  <h2 class="m-0 text-xl">{{ t('settings.general.carouselsAnnouncement.title') }}</h2>
+                  <span class="eyebrow inline-flex w-fit self-start text-xs">{{ t('common.newFeature') }}</span>
+                </div>
+                <p class="m-0 text-[0.95rem] font-medium text-text">{{ t('settings.general.carouselsAnnouncement.headline') }}</p>
+                <p class="m-0 text-muted">
+                  {{ t('settings.general.carouselsAnnouncement.description') }}
+                  <button
+                    class="ml-1 inline-flex border-0 bg-transparent p-0 text-[0.92em] font-semibold text-accent-strong underline underline-offset-[0.18em] cursor-pointer transition-opacity duration-180 hover:opacity-80"
+                    type="button"
+                    :aria-expanded="showCarouselsAnnouncementStructure"
+                    @click="toggleCarouselsAnnouncementStructure"
+                  >
+                    {{ showCarouselsAnnouncementStructure ? t('settings.general.carouselsAnnouncement.hideStructure') : t('settings.general.carouselsAnnouncement.showStructure') }}
+                  </button>
+                </p>
+              </div>
+              <button
+                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-0 bg-[rgba(24,119,242,0.08)] text-accent-strong cursor-pointer transition-colors duration-180 hover:bg-[rgba(24,119,242,0.14)]"
+                type="button"
+                :aria-label="t('settings.general.carouselsAnnouncement.dismissAria')"
+                @click="dismissCarouselsAnnouncement"
+              >
+                <span class="i-fluent-dismiss-20-filled h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <pre v-if="showCarouselsAnnouncementStructure" class="m-0 overflow-x-auto rounded-[0.95rem] border border-border bg-[color-mix(in_srgb,var(--surface-alt)_82%,transparent_18%)] p-4 text-[0.78rem] leading-[1.55] text-muted"><code>gallery/
+└─ AnimalPlanet/
+   ├─ cover.jpg
+   ├─ post-1.jpg
+   └─ carousels/
+      ├─ Safari/
+      │  ├─ 01-arrival.jpg
+      │  ├─ 02-lions.mp4
+      │  └─ 03-sunset.jpg
+      └─ Portraits/
+         ├─ front.jpg
+         └─ detail.jpg</code></pre>
+          </section>
+
           <section
             v-if="showStoriesMigrationNotice"
             class="card grid gap-[1rem] p-6 border-[color-mix(in_srgb,#d2a133_42%,var(--border)_58%)]"
@@ -903,6 +981,31 @@
                 </button>
               </div>
 
+              <div class="grid gap-3 border-t border-border px-6 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="m-0 text-[0.96rem] font-semibold text-text">{{ t('settings.general.carouselsMode.label') }}</p>
+                    <span class="inline-flex items-center rounded-full bg-surface-alt px-2 py-[0.2rem] text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted">
+                      {{ t('settings.general.storiesMode.scanRequired') }}
+                    </span>
+                  </div>
+                  <p class="m-0 mt-[0.25rem] text-[0.84rem] text-muted">{{ carouselsModeLabelDescription }}</p>
+                </div>
+                <button
+                  class="inline-flex items-center justify-end border-0 bg-transparent p-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                  type="button"
+                  role="switch"
+                  :aria-checked="carouselsMode"
+                  :disabled="savingGeneralSettings || waitingForInitialStatus"
+                  @click="toggleCarouselsModeSetting"
+                >
+                  <span class="sr-only">{{ t('settings.general.carouselsMode.toggleLabel') }}</span>
+                  <span class="inline-flex h-7 w-12 items-center rounded-full p-[0.15rem] transition-colors duration-180" :class="carouselsMode ? 'bg-accent' : 'bg-[color-mix(in_srgb,var(--border)_88%,var(--surface-alt)_12%)]'">
+                    <span class="h-[1.35rem] w-[1.35rem] rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.18)] transition-transform duration-180" :class="carouselsMode ? 'translate-x-[1.2rem]' : 'translate-x-0'" />
+                  </span>
+                </button>
+              </div>
+
               <div class="grid gap-4 px-6 py-4">
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
@@ -1062,6 +1165,16 @@
                   'text-[#c0392b] bg-[rgba(214,48,49,0.12)]': statusTone === 'danger',
                 }"
               >{{ statusLabel }}</span>
+            </div>
+
+            <div
+              v-if="appStore.isCarouselsReconciliationPending"
+              class="rounded-[0.95rem] border border-[rgba(210,161,51,0.28)] bg-[rgba(210,161,51,0.08)] px-4 py-3 text-[#9f6a00]"
+            >
+              <p class="m-0 text-[0.76rem] font-bold tracking-[0.08em] uppercase">{{ t('settings.library.carouselReconciliation.title') }}</p>
+              <p class="m-0 mt-1 text-[0.9rem] leading-relaxed">
+                {{ appStore.isLibraryRebuildRequired ? t('settings.library.carouselReconciliation.rebuildDescription') : t('settings.library.carouselReconciliation.scanDescription') }}
+              </p>
             </div>
 
             <div
@@ -1252,7 +1365,8 @@ import {
   updateHomeFeedDefault,
   updateNestedFolderTitleFormat,
   updateReelsFeedDefault,
-  updateStoriesMode
+  updateStoriesMode,
+  updateCarouselsMode
 } from '../api/gallery';
 import { SUPPORTED_LOCALES, type SupportedLocale } from '../locales';
 import { useAppStore } from '../stores/app';
@@ -1304,10 +1418,13 @@ const nestedFolderTitleFormat = ref<NestedFolderTitleFormat>('folder');
 const savedLocaleSelection = ref<SupportedLocale | null>(appStore.savedDefaultLocale);
 const localeSelectionHydrated = ref(false);
 const storiesMode = ref(false);
+const carouselsMode = ref(false);
 const feedDefaultsHydrated = ref(false);
 const storiesModeHydrated = ref(false);
+const carouselsModeHydrated = ref(false);
 const activeGeneralSettingsMenu = ref<'home' | 'reels' | 'folder' | 'nestedTitle' | null>(null);
 const showStoriesAnnouncementStructure = ref(false);
+const showCarouselsAnnouncementStructure = ref(false);
 const generalSettingsSaveArea = ref<HTMLElement | null>(null);
 const localeSelectId = 'settings-language-select';
 const acknowledgedStoriesMigrationChoice = ref(false);
@@ -1321,6 +1438,7 @@ const NOTICE_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
 const MIN_PASSWORD_LENGTH = 8;
 const STORIES_MIGRATION_NOTICE_STORAGE_KEY = 'foldergram-stories-migration-dismissed';
 const STORIES_ANNOUNCEMENT_STORAGE_KEY = 'foldergram-stories-announcement-dismissed';
+const CAROUSELS_ANNOUNCEMENT_STORAGE_KEY = 'foldergram-carousels-announcement-dismissed:v1';
 const PLACES_ONBOARDING_STORAGE_KEY = 'foldergram:places-onboarding-dismissed:v1';
 const EXCLUDED_FOLDER_EDGE_SLASH_PATTERN = /^\/+|\/+$/g;
 const EXCLUDED_FOLDER_UNSUPPORTED_PATTERN = /[*?]/;
@@ -1405,6 +1523,7 @@ const dismissedScanErrorNotice = ref(loadDismissedScanErrorNotice());
 const dismissedIgnoredRootMediaNotice = ref(loadDismissedIgnoredRootMediaNotice());
 const dismissedStoriesMigrationNotice = ref(loadDismissedStoriesNotice(STORIES_MIGRATION_NOTICE_STORAGE_KEY));
 const dismissedStoriesAnnouncement = ref(loadDismissedStoriesNotice(STORIES_ANNOUNCEMENT_STORAGE_KEY));
+const dismissedCarouselsAnnouncement = ref(loadDismissedStoriesNotice(CAROUSELS_ANNOUNCEMENT_STORAGE_KEY));
 const dismissedPlacesOnboardingBanner = ref(loadDismissedStoriesNotice(PLACES_ONBOARDING_STORAGE_KEY));
 
 function wait(milliseconds: number) {
@@ -1548,13 +1667,18 @@ function syncStoriesModeFromSaved() {
   storiesModeHydrated.value = true;
 }
 
+function syncCarouselsModeFromSaved() {
+  carouselsMode.value = appStore.treatCarouselsAsFolders;
+  carouselsModeHydrated.value = true;
+}
+
 function syncExcludedFoldersFromSaved() {
   customExcludedFoldersDraft.value = formatExcludedFolderRules(adminStats.value?.excludedFolders.customExcludedFolders ?? []);
   excludedFoldersHydrated.value = true;
 }
 
 const scan = computed(() => appStore.stats?.scan ?? null);
-const lastCompletedScan = computed(() => scan.value?.lastCompletedScan ?? adminStats.value?.lastScan ?? null);
+const lastCompletedScan = computed(() => adminStats.value?.lastScan ?? scan.value?.lastCompletedScan ?? null);
 const activeScanReason = computed(() => scan.value?.scanReason ?? null);
 const supportedLocaleOptions = computed<Array<{ id: SupportedLocale; label: string }>>(() =>
   SUPPORTED_LOCALES.map((locale) => ({
@@ -1635,6 +1759,7 @@ const savedReelsFeedDefaultMode = computed(() => appStore.defaultReelsFeedMode);
 const savedFolderImageOrderDefault = computed(() => appStore.defaultFolderImageOrder);
 const savedNestedFolderTitleFormat = computed(() => appStore.nestedFolderTitleFormat);
 const savedStoriesMode = computed(() => appStore.treatStoriesAsFolders);
+const savedCarouselsMode = computed(() => appStore.treatCarouselsAsFolders);
 const savedCustomExcludedFolders = computed(() => adminStats.value?.excludedFolders.customExcludedFolders ?? []);
 const envExcludedFolders = computed(() => adminStats.value?.excludedFolders.envExcludedFolders ?? []);
 const effectiveExcludedFolders = computed(() => adminStats.value?.excludedFolders.effectiveExcludedFolders ?? []);
@@ -1643,6 +1768,7 @@ const legacyDerivativeMigrationPending = computed(
 );
 const legacyDerivativeMigrationCount = computed(() => adminStats.value?.libraryIndex.pendingDerivativeMigrationRows ?? 0);
 const storiesModeRequiresDecision = computed(() => appStore.stats?.storiesMigration.decisionPending === true);
+const carouselsModeRequiresDecision = computed(() => appStore.stats?.carouselsMigration?.decisionPending === true);
 const savedHomeFeedDefaultModeLabel = computed(
   () => homeFeedDefaultOptions.value.find((mode) => mode.id === savedHomeFeedDefaultMode.value)?.label ?? t('settings.general.homeFeed.options.random.label')
 );
@@ -1701,6 +1827,14 @@ const feedDefaultsDirty = computed(
   () => homeFeedDefaultDirty.value || reelsFeedDefaultDirty.value || folderImageOrderDirty.value || nestedFolderTitleDirty.value
 );
 const storiesModeDirty = computed(() => storiesModeHydrated.value && storiesMode.value !== savedStoriesMode.value);
+const carouselsModeDirty = computed(() => carouselsModeHydrated.value && carouselsMode.value !== savedCarouselsMode.value);
+const storiesScanRequired = computed(() => storiesModeDirty.value || storiesModeRequiresDecision.value);
+const carouselsScanRequired = computed(
+  () => carouselsModeDirty.value || carouselsModeRequiresDecision.value || appStore.isCarouselsReconciliationPending
+);
+const hasUnsavedReservedFolderRuleChanges = computed(
+  () => storiesModeDirty.value || storiesModeRequiresDecision.value || carouselsModeDirty.value || carouselsModeRequiresDecision.value
+);
 const excludedFoldersDirty = computed(() => {
   if (!excludedFoldersHydrated.value) {
     return false;
@@ -1713,14 +1847,17 @@ const excludedFoldersDirty = computed(() => {
     return true;
   }
 });
+const hasUnsavedFolderRuleChanges = computed(
+  () => excludedFoldersDirty.value || hasUnsavedReservedFolderRuleChanges.value
+);
 const generalSettingsDirty = computed(
-  () => localeDirty.value || feedDefaultsDirty.value || storiesModeDirty.value || excludedFoldersDirty.value || storiesModeRequiresDecision.value
+  () => localeDirty.value || feedDefaultsDirty.value || storiesModeDirty.value || carouselsModeDirty.value || excludedFoldersDirty.value || storiesModeRequiresDecision.value || carouselsModeRequiresDecision.value
 );
 const showSavedDefaultLocaleNotice = computed(
   () => savedLocaleSelection.value !== null && appStore.locale !== savedLocaleSelection.value
 );
 const showGeneralSettingsRescanNotice = computed(
-  () => storiesModeDirty.value || storiesModeRequiresDecision.value || excludedFoldersDirty.value
+  () => storiesScanRequired.value || carouselsScanRequired.value || excludedFoldersDirty.value
 );
 const generalSettingsSaveDisabled = computed(
   () => waitingForInitialStatus.value || savingGeneralSettings.value || !generalSettingsDirty.value
@@ -1740,7 +1877,7 @@ const generalSettingsActionNote = computed(() => {
     return t('settings.general.actionNote.loading');
   }
 
-  if (excludedFoldersDirty.value && (storiesModeDirty.value || storiesModeRequiresDecision.value || defaultSettingsDirtyCount.value > 0)) {
+  if (excludedFoldersDirty.value && (hasUnsavedReservedFolderRuleChanges.value || defaultSettingsDirtyCount.value > 0)) {
     return t('settings.general.actionNote.excludedAndOther');
   }
 
@@ -1748,11 +1885,11 @@ const generalSettingsActionNote = computed(() => {
     return t('settings.general.actionNote.excludedOnly');
   }
 
-  if (storiesModeDirty.value && defaultSettingsDirtyCount.value > 0) {
+  if (hasUnsavedReservedFolderRuleChanges.value && defaultSettingsDirtyCount.value > 0) {
     return t('settings.general.actionNote.storiesAndDefaults');
   }
 
-  if (storiesModeDirty.value || storiesModeRequiresDecision.value) {
+  if (hasUnsavedReservedFolderRuleChanges.value) {
     return t('settings.general.actionNote.storiesOnly');
   }
 
@@ -1780,15 +1917,37 @@ const generalSettingsActionNote = computed(() => {
     return t('settings.general.actionNote.nestedFolderTitleOnly');
   }
 
+  if (appStore.isCarouselsReconciliationPending) {
+    return t('settings.general.actionNote.carouselReconciliation');
+  }
+
   return t('settings.general.actionNote.idle');
 });
 const generalSettingsRescanNotice = computed(() => {
-  if (excludedFoldersDirty.value && (storiesModeDirty.value || storiesModeRequiresDecision.value)) {
+  if (appStore.isLibraryRebuildRequired) {
+    return hasUnsavedFolderRuleChanges.value
+      ? t('settings.general.rescanNotice.rebuildRequired')
+      : t('settings.general.rescanNotice.pendingRebuild');
+  }
+
+  if (appStore.isCarouselsReconciliationPending && !hasUnsavedFolderRuleChanges.value) {
+    return t('settings.general.rescanNotice.pendingCarousels');
+  }
+
+  if (excludedFoldersDirty.value && (storiesScanRequired.value || carouselsScanRequired.value)) {
     return t('settings.general.rescanNotice.excludedAndStories');
   }
 
   if (excludedFoldersDirty.value) {
     return t('settings.general.rescanNotice.excludedOnly');
+  }
+
+  if (storiesScanRequired.value && carouselsScanRequired.value) {
+    return t('settings.general.rescanNotice.storiesAndCarousels');
+  }
+
+  if (carouselsScanRequired.value) {
+    return t('settings.general.rescanNotice.carouselsOnly');
   }
 
   return t('settings.general.rescanNotice.storiesOnly');
@@ -1797,6 +1956,21 @@ const storiesModeLabelDescription = computed(() =>
   storiesMode.value
     ? t('settings.general.storiesMode.enabledDescription')
     : t('settings.general.storiesMode.disabledDescription')
+);
+const carouselsModeLabelDescription = computed(() =>
+  carouselsMode.value
+    ? t('settings.general.carouselsMode.enabledDescription')
+    : t('settings.general.carouselsMode.disabledDescription')
+);
+const showCarouselsMigrationNotice = computed(() =>
+  appStore.stats?.carouselsMigration?.hasLegacyCarouselsCandidates === true &&
+  carouselsModeRequiresDecision.value
+);
+const showCarouselsAnnouncementCard = computed(
+  () =>
+    appStore.stats?.carouselsMigration?.hasLegacyCarouselsCandidates === false &&
+    appStore.stats?.carouselsMigration?.decisionPending === true &&
+    !dismissedCarouselsAnnouncement.value
 );
 const storiesMigrationActionHelper = computed(() => {
   if (savingGeneralSettings.value) {
@@ -1918,6 +2092,10 @@ const scanActionNote = computed(() => {
 
   if (legacyDerivativeMigrationPending.value) {
     return t('settings.library.scanActionNote.legacyMigration');
+  }
+
+  if (appStore.isCarouselsReconciliationPending) {
+    return t('settings.library.scanActionNote.carouselReconciliation');
   }
 
   return t('settings.library.scanActionNote.idle');
@@ -2144,6 +2322,12 @@ const showScanErrorNotice = computed(() => {
 
   return Date.now() >= dismissed.dismissedUntil;
 });
+const showScanWarningNotice = computed(() =>
+  !appStore.isLibraryUnavailable &&
+  !appStore.isScanning &&
+  lastCompletedScan.value?.status === 'completed' &&
+  (lastCompletedScan.value.warning_count ?? 0) > 0
+);
 const ignoredRootMediaCount = computed(() => appStore.stats?.libraryIndex.ignoredRootMediaCount ?? 0);
 const showIgnoredRootMediaNotice = computed(() => {
   if (appStore.isLibraryUnavailable || (appStore.stats?.folders ?? 0) === 0 || ignoredRootMediaCount.value === 0) {
@@ -2311,6 +2495,14 @@ function dismissStoriesAnnouncement() {
   }
 }
 
+function dismissCarouselsAnnouncement() {
+  dismissedCarouselsAnnouncement.value = true;
+  showCarouselsAnnouncementStructure.value = false;
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(CAROUSELS_ANNOUNCEMENT_STORAGE_KEY, '1');
+  }
+}
+
 function dismissPlacesOnboardingBanner() {
   dismissedPlacesOnboardingBanner.value = true;
   if (typeof window !== 'undefined') {
@@ -2324,6 +2516,10 @@ function openPlacesTab() {
 
 function toggleStoriesAnnouncementStructure() {
   showStoriesAnnouncementStructure.value = !showStoriesAnnouncementStructure.value;
+}
+
+function toggleCarouselsAnnouncementStructure() {
+  showCarouselsAnnouncementStructure.value = !showCarouselsAnnouncementStructure.value;
 }
 
 async function enableAccessProtection() {
@@ -2495,6 +2691,20 @@ function chooseStoriesMigrationMode(value: boolean) {
   });
 }
 
+function selectCarouselsMode(value: boolean, scrollToSaveArea = false) {
+  clearGeneralSettingsFeedback();
+  carouselsMode.value = value;
+  if (scrollToSaveArea) void scrollToGeneralSettingsSaveArea();
+}
+
+function toggleCarouselsModeSetting() {
+  selectCarouselsMode(!carouselsMode.value, showCarouselsMigrationNotice.value);
+}
+
+function chooseCarouselsMigrationMode(value: boolean) {
+  selectCarouselsMode(value, true);
+}
+
 function selectHomeFeedDefault(mode: FeedMode) {
   clearGeneralSettingsFeedback();
   homeFeedDefaultMode.value = mode;
@@ -2527,6 +2737,7 @@ async function saveGeneralSettings() {
   const shouldSaveLocale = localeDirty.value;
   const shouldSaveExcludedFolders = excludedFoldersDirty.value;
   const shouldSaveStories = storiesModeDirty.value || storiesModeRequiresDecision.value;
+  const shouldSaveCarousels = carouselsModeDirty.value || carouselsModeRequiresDecision.value;
   const shouldSaveHome = homeFeedDefaultDirty.value;
   const shouldSaveReels = reelsFeedDefaultDirty.value;
   const shouldSaveFolderOrder = folderImageOrderDirty.value;
@@ -2541,6 +2752,7 @@ async function saveGeneralSettings() {
     shouldSaveNestedFolderTitle
   ].filter(Boolean).length;
   const savedParts: string[] = [];
+  const savedFolderRuleCount = [shouldSaveExcludedFolders, shouldSaveStories, shouldSaveCarousels].filter(Boolean).length;
   let nextExcludedFolders: string[] = [];
 
   if (shouldSaveExcludedFolders) {
@@ -2592,7 +2804,21 @@ async function saveGeneralSettings() {
 
       if (appStore.stats) {
         appStore.stats.preferences.treatStoriesAsFolders = payload.treatStoriesAsFolders;
-        appStore.stats.storiesMigration.decisionPending = false;
+        if (appStore.stats.storiesMigration) {
+          appStore.stats.storiesMigration.decisionPending = false;
+        }
+      }
+    }
+
+    if (shouldSaveCarousels) {
+      const payload = await updateCarouselsMode(carouselsMode.value);
+      savedParts.push(t('settings.general.feedback.parts.carouselsFolderHandling'));
+      carouselsMode.value = payload.preferences.treatCarouselsAsFolders;
+      if (appStore.stats) {
+        appStore.stats.preferences.treatCarouselsAsFolders = payload.preferences.treatCarouselsAsFolders;
+        if (appStore.stats.carouselsMigration) {
+          appStore.stats.carouselsMigration.decisionPending = false;
+        }
       }
     }
 
@@ -2634,20 +2860,24 @@ async function saveGeneralSettings() {
 
     await appStore.fetchStats({ background: true });
 
-    if (shouldSaveStories || shouldSaveExcludedFolders) {
+    if (shouldSaveStories || shouldSaveCarousels || shouldSaveExcludedFolders) {
       await loadAdminStats().catch(() => {});
     }
 
-    if ((shouldSaveStories || shouldSaveExcludedFolders) && shouldSaveAnyDefault) {
+    if (savedFolderRuleCount > 0 && appStore.isLibraryRebuildRequired) {
+      setGeneralSettingsFeedback('success', t('settings.general.feedback.folderRulesSavedRebuild'));
+    } else if (savedFolderRuleCount > 0 && shouldSaveAnyDefault) {
       setGeneralSettingsFeedback('success', t('settings.general.feedback.settingsAndFolderRulesSaved'));
-    } else if (shouldSaveExcludedFolders && shouldSaveStories) {
-      setGeneralSettingsFeedback('success', t('settings.general.feedback.folderRulesAndStoriesSaved'));
+    } else if (savedFolderRuleCount > 1) {
+      setGeneralSettingsFeedback('success', t('settings.general.feedback.folderRulesSaved'));
     } else if (shouldSaveExcludedFolders) {
       setGeneralSettingsFeedback('success', t('settings.general.feedback.excludedFoldersSaved'));
     } else if (shouldSaveStories && shouldSaveAnyDefault) {
       setGeneralSettingsFeedback('success', t('settings.general.feedback.settingsAndStoriesSaved'));
     } else if (shouldSaveStories) {
       setGeneralSettingsFeedback('success', t('settings.general.feedback.storiesSaved'));
+    } else if (shouldSaveCarousels) {
+      setGeneralSettingsFeedback('success', t('settings.general.feedback.carouselsSaved'));
     } else if (savedDefaultCount > 1) {
       setGeneralSettingsFeedback('success', t('settings.general.feedback.defaultsSaved'));
     } else if (shouldSaveLocale) {
@@ -2678,11 +2908,12 @@ async function saveGeneralSettings() {
     }
   } catch (error) {
     await appStore.fetchStats({ background: true }).catch(() => {});
-    if (shouldSaveStories || shouldSaveExcludedFolders) {
+    if (shouldSaveStories || shouldSaveCarousels || shouldSaveExcludedFolders) {
       await loadAdminStats().catch(() => {});
     }
 
     const message = error instanceof Error ? error.message : t('settings.general.errors.update');
+
     if (savedParts.length > 0) {
       setGeneralSettingsFeedback(
         'error',
@@ -2817,6 +3048,7 @@ onMounted(async () => {
     syncLocaleSelectionFromSaved();
     syncFeedDefaultsFromSaved();
     syncStoriesModeFromSaved();
+    syncCarouselsModeFromSaved();
   }
   await placesStore.fetchStatus();
   await loadAdminStats().catch(() => {});
@@ -2830,7 +3062,8 @@ watch(
       savedHomeFeedDefaultMode.value,
       savedReelsFeedDefaultMode.value,
       savedFolderImageOrderDefault.value,
-      savedStoriesMode.value
+      savedStoriesMode.value,
+      savedCarouselsMode.value
     ] as const,
   ([stats, loadingStats]) => {
     if (!stats || loadingStats) {
@@ -2847,6 +3080,10 @@ watch(
 
     if (!storiesModeHydrated.value || savingGeneralSettings.value || !storiesModeDirty.value) {
       syncStoriesModeFromSaved();
+    }
+
+    if (!carouselsModeHydrated.value || savingGeneralSettings.value || !carouselsModeDirty.value) {
+      syncCarouselsModeFromSaved();
     }
   },
   {

@@ -332,5 +332,6 @@ describe('router', () => {
 
     expect(canAccessRoute(router.resolve('/share/family'))).toBe(true);
     expect(canAccessRoute(router.resolve('/share/family/images/42'))).toBe(true);
+    expect(canAccessRoute(router.resolve('/share/family/posts/42'))).toBe(true);
   });
 });
