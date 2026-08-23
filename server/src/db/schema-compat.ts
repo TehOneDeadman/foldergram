@@ -107,6 +107,10 @@ export function applyBaselineCompatMigrations(database: DatabaseSync): void {
     database.exec("ALTER TABLE images ADD COLUMN playback_strategy TEXT NOT NULL DEFAULT 'preview'");
   }
 
+  if (tableExists(database, 'images') && !tableHasColumn(database, 'images', 'caption')) {
+    database.exec('ALTER TABLE images ADD COLUMN caption TEXT NULL');
+  }
+
   if (tableExists(database, 'images') && tableHasColumn(database, 'images', 'playback_strategy')) {
     database.exec("UPDATE images SET playback_strategy = 'preview' WHERE playback_strategy IS NULL OR playback_strategy = ''");
   }
@@ -185,12 +189,27 @@ function cleanOptionalBaselineForeignKeys(database: DatabaseSync): void {
     SET avatar_image_id = NULL
     WHERE avatar_image_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM images WHERE images.id = folders.avatar_image_id);
+  `);
 
-    UPDATE folders
-    SET story_owner_folder_id = NULL
-    WHERE story_owner_folder_id IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM folders AS owner_folders WHERE owner_folders.id = folders.story_owner_folder_id);
+  if (tableHasColumn(database, 'folders', 'story_owner_folder_id')) {
+    database.exec(`
+      UPDATE folders
+      SET story_owner_folder_id = NULL
+      WHERE story_owner_folder_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM folders AS owner_folders WHERE owner_folders.id = folders.story_owner_folder_id);
+    `);
+  }
 
+  if (tableHasColumn(database, 'folders', 'carousel_owner_folder_id')) {
+    database.exec(`
+      UPDATE folders
+      SET carousel_owner_folder_id = NULL
+      WHERE carousel_owner_folder_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM folders AS owner_folders WHERE owner_folders.id = folders.carousel_owner_folder_id);
+    `);
+  }
+
+  database.exec(`
     UPDATE images
     SET place_id = NULL
     WHERE place_id IS NOT NULL
@@ -199,6 +218,14 @@ function cleanOptionalBaselineForeignKeys(database: DatabaseSync): void {
 }
 
 function rebuildFoldersWithBaselineForeignKeys(database: DatabaseSync): void {
+  const hasCarouselOwner = tableHasColumn(database, 'folders', 'carousel_owner_folder_id');
+  const carouselColumnSql = hasCarouselOwner ? 'carousel_owner_folder_id INTEGER NULL,' : '';
+  const carouselInsertColumnSql = hasCarouselOwner ? 'carousel_owner_folder_id,' : '';
+  const carouselSelectSql = hasCarouselOwner ? 'carousel_owner_folder_id,' : '';
+  const carouselForeignKeySql = hasCarouselOwner
+    ? ', FOREIGN KEY (carousel_owner_folder_id) REFERENCES __foldergram_baseline_folders(id) ON DELETE SET NULL'
+    : '';
+
   database.exec(`
     DROP TABLE IF EXISTS __foldergram_baseline_folders;
 
@@ -209,6 +236,7 @@ function rebuildFoldersWithBaselineForeignKeys(database: DatabaseSync): void {
       folder_path TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'normal',
       story_owner_folder_id INTEGER NULL,
+      ${carouselColumnSql}
       description TEXT NULL,
       avatar_image_id INTEGER NULL,
       avatar_source TEXT NOT NULL DEFAULT 'auto',
@@ -216,6 +244,7 @@ function rebuildFoldersWithBaselineForeignKeys(database: DatabaseSync): void {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (avatar_image_id) REFERENCES images(id),
       FOREIGN KEY (story_owner_folder_id) REFERENCES __foldergram_baseline_folders(id) ON DELETE SET NULL
+      ${carouselForeignKeySql}
     );
 
     INSERT INTO __foldergram_baseline_folders(
@@ -225,6 +254,7 @@ function rebuildFoldersWithBaselineForeignKeys(database: DatabaseSync): void {
       folder_path,
       role,
       story_owner_folder_id,
+      ${carouselInsertColumnSql}
       description,
       avatar_image_id,
       avatar_source,
@@ -238,6 +268,7 @@ function rebuildFoldersWithBaselineForeignKeys(database: DatabaseSync): void {
       folder_path,
       role,
       story_owner_folder_id,
+      ${carouselSelectSql}
       description,
       avatar_image_id,
       avatar_source,
@@ -278,6 +309,7 @@ function rebuildImagesWithBaselineForeignKeys(database: DatabaseSync): void {
       taken_at INTEGER NULL,
       taken_at_source TEXT NULL,
       exif_json TEXT NULL,
+      caption TEXT NULL,
       thumbnail_path TEXT NOT NULL,
       preview_path TEXT NOT NULL,
       playback_strategy TEXT NOT NULL DEFAULT 'preview',
@@ -315,6 +347,7 @@ function rebuildImagesWithBaselineForeignKeys(database: DatabaseSync): void {
       taken_at,
       taken_at_source,
       exif_json,
+      caption,
       thumbnail_path,
       preview_path,
       playback_strategy,
@@ -349,6 +382,7 @@ function rebuildImagesWithBaselineForeignKeys(database: DatabaseSync): void {
       taken_at,
       taken_at_source,
       exif_json,
+      caption,
       thumbnail_path,
       preview_path,
       playback_strategy,

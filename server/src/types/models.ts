@@ -4,8 +4,9 @@ export type NestedFolderTitleFormat = 'folder' | 'parent-plus-folder';
 export type TakenAtSource = 'exif' | 'mtime' | 'first_seen' | 'sort_timestamp';
 export type PlaybackStrategy = 'preview' | 'original';
 export type FolderAvatarSource = 'auto' | 'manual' | 'cover';
-export type FolderRole = 'normal' | 'story_root' | 'story_capsule';
+export type FolderRole = 'normal' | 'story_root' | 'story_capsule' | 'carousel_source';
 export type PlaceKind = 'city' | 'approximate_spot' | 'manual';
+export type PostType = 'single' | 'carousel';
 
 export interface ImageExifData {
   cameraMake?: string;
@@ -28,6 +29,7 @@ export interface FolderRecord {
   folder_path: string;
   role: FolderRole;
   story_owner_folder_id: number | null;
+  carousel_owner_folder_id: number | null;
   description: string | null;
   avatar_image_id: number | null;
   avatar_source: FolderAvatarSource;
@@ -60,6 +62,8 @@ export interface PlaceRecord {
 
 export interface FolderSummaryRecord extends FolderRecord {
   image_count: number;
+  post_count: number;
+  carousel_count: number;
   video_count: number;
   latest_image_mtime_ms: number | null;
   has_avatar_story?: number | null;
@@ -103,6 +107,30 @@ export interface ImageRecord {
   updated_at: string;
 }
 
+export interface PostRecord {
+  id: number;
+  folder_id: number;
+  place_id: number | null;
+  source_path: string;
+  post_type: PostType;
+  caption: string | null;
+  sort_timestamp: number;
+  taken_at: number | null;
+  taken_at_source: TakenAtSource | null;
+  is_deleted: number;
+  deleted_at: string | null;
+  is_trashed: number;
+  trashed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PostItemRecord {
+  post_id: number;
+  image_id: number;
+  position: number;
+}
+
 export interface PlaceSummary {
   id: number;
   slug: string;
@@ -121,6 +149,8 @@ export interface ScanRunRecord {
   updated_files: number;
   removed_files: number;
   error_text: string | null;
+  warning_count: number;
+  warning_text: string | null;
 }
 
 export interface AppSettingRecord {
@@ -138,7 +168,8 @@ export interface FolderScanStateRecord {
 }
 
 export interface LikeRecord {
-  image_id: number;
+  post_id: number;
+  image_id?: number;
   created_at: string;
 }
 
@@ -156,10 +187,12 @@ export interface CollectionSummaryRecord extends CollectionRecord {
   cover_image_id: number | null;
   cover_thumbnail_path: string | null;
   preview_image_ids: string | null;
+  cover_post_id?: number | null;
 }
 
 export interface CollectionMembershipRecord extends CollectionSummaryRecord {
   contains_image: number;
+  contains_post?: number;
 }
 
 export interface FolderShareLinkRecord {
@@ -182,6 +215,25 @@ export interface FolderSharePasswordRecord {
   updated_at: string;
 }
 
+export interface PostMediaItem {
+  imageId: number;
+  position: number;
+  filename: string;
+  width: number;
+  height: number;
+  mediaType: MediaType;
+  durationMs: number | null;
+  isAnimated: boolean | null;
+  thumbnailUrl: string;
+  previewUrl: string;
+  originalUrl?: string;
+  playbackStrategy?: PlaybackStrategy | null;
+  exif?: ImageExifData | null;
+  mimeType?: string;
+  fileSize?: number;
+  relativePath?: string;
+}
+
 export interface FeedImage {
   id: number;
   folderId: number;
@@ -191,7 +243,9 @@ export interface FeedImage {
   folderPath: string;
   folderBreadcrumb?: string | null;
   filename: string;
+  sourcePath?: string;
   caption: string | null;
+  carouselTitle?: string | null;
   width: number;
   height: number;
   mediaType: MediaType;
@@ -203,9 +257,20 @@ export interface FeedImage {
   takenAt: number | null;
   isSaved: boolean;
   place?: PlaceSummary | null;
+
+  // Carousel post properties
+  postType?: PostType;
+  itemCount?: number;
+  mediaItems?: PostMediaItem[];
 }
 
-export interface ReelCandidate extends FeedImage {
+export interface FeedPost extends FeedImage {
+  postType: PostType;
+  itemCount: number;
+  mediaItems: PostMediaItem[];
+}
+
+export interface ReelCandidate extends FeedPost {
   likedAt: string | null;
 }
 
@@ -221,8 +286,22 @@ export interface ImageDetail extends FeedImage {
   previousImageId: number | null;
 }
 
+export interface PostDetail extends ImageDetail {
+  postType: PostType;
+  itemCount: number;
+  mediaItems: PostMediaItem[];
+  nextPostId: number | null;
+  previousPostId: number | null;
+}
+
 export interface TrashImage extends FeedImage {
   trashedAt: string | null;
+}
+
+export interface TrashPost extends TrashImage {
+  postType: PostType;
+  itemCount: number;
+  mediaItems: PostMediaItem[];
 }
 
 export interface PlaceDetail extends PlaceSummary {
@@ -242,6 +321,7 @@ export interface SharedFolderSummary {
   name: string;
   description: string | null;
   imageCount: number;
+  postCount: number;
   videoCount: number;
   avatarThumbnailUrl: string | null;
   sortTimestamp: number;
@@ -254,6 +334,7 @@ export interface SharedFeedItem {
   folderName: string;
   filename: string;
   caption: string | null;
+  carouselTitle?: string | null;
   width: number;
   height: number;
   mediaType: MediaType;
@@ -262,6 +343,10 @@ export interface SharedFeedItem {
   thumbnailUrl: string;
   previewUrl: string;
   sortTimestamp: number;
+
+  postType?: PostType;
+  itemCount?: number;
+  mediaItems?: PostMediaItem[];
 }
 
 export interface SharedImageDetail {
@@ -271,6 +356,7 @@ export interface SharedImageDetail {
   folderName: string;
   filename: string;
   caption: string | null;
+  carouselTitle?: string | null;
   mediaType: MediaType;
   mimeType: string;
   width: number;
@@ -282,4 +368,8 @@ export interface SharedImageDetail {
   sortTimestamp: number;
   nextImageId: number | null;
   previousImageId: number | null;
+
+  postType?: PostType;
+  itemCount?: number;
+  mediaItems?: PostMediaItem[];
 }

@@ -174,3 +174,7 @@ Yes, if an admin enables `viewer_access_mode=public` from Settings.
 In that mode, visitors can browse immediately and keep favorites only in the
 current browser, alongside browser-local saved collections. Admin-only controls
 still require unlocking with the admin password.
+
+## How do I create a post with several photos or videos?
+
+Put 2–20 supported files directly in `AppFolder/carousels/Post name/`, prefix their filenames to control order, and scan. The first item is the post cover, the child-folder name is the default caption, and the carousel counts as one post. Videos inside it play in the carousel rather than appearing in Reels. See [Carousel Posts](/carousel-posts).

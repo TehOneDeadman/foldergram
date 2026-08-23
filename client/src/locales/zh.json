@@ -149,6 +149,22 @@
         "helper": "先在这里选择模式，再在下方保存。随后运行一次图库扫描，让索引后的文件夹结构与之匹配。",
         "helperSaving": "请先等待当前设置更新完成。"
       },
+      "carouselsMigration": {
+        "eyebrow": "轮播迁移",
+        "title": "此图库可能已使用名为 carousels 的文件夹",
+        "description": "请选择 AppFolder/carousels 用于创建多媒体帖子，还是继续作为普通文件夹。",
+        "useFeature": "使用轮播帖子",
+        "keepFolders": "保留普通文件夹",
+        "helper": "请在此选择模式并在下方保存。随后运行一次图库扫描，使已索引文件夹与轮播帖子保持一致。"
+      },
+      "carouselsAnnouncement": {
+        "title": "轮播帖子",
+        "headline": "保留的 carousels/ 文件夹可以将多个媒体文件组合成一个帖子",
+        "description": "在 AppFolder/carousels 中为每个轮播创建一个直接子文件夹，然后在其中直接放入 2–20 个图片、动图或视频。幻灯片按文件名的自然顺序排列，第一项将作为封面。数字文件名前缀并非必需。",
+        "dismissAria": "关闭轮播帖子公告",
+        "showStructure": "查看轮播目录结构",
+        "hideStructure": "隐藏轮播目录结构"
+      },
       "announcement": {
         "title": "Stories",
         "headline": "保留的 stories/ 文件夹可以驱动应用文件夹的 Stories",
@@ -250,6 +266,12 @@
         "enabledDescription": "旧版模式已启用。stories 文件夹会继续在所有位置作为普通应用文件夹。",
         "disabledDescription": "保留 stories 模式已启用。AppFolder/stories 会驱动头像 stories 和精选圆圈。"
       },
+      "carouselsMode": {
+        "label": "将 carousels 文件夹视为普通应用文件夹",
+        "toggleLabel": "切换 carousels 文件夹行为",
+        "enabledDescription": "旧版模式已启用。carousels 文件夹仍是普通应用文件夹。",
+        "disabledDescription": "轮播模式已启用。AppFolder/carousels 的每个直接子文件夹会成为一篇帖子。"
+      },
       "excludedFolders": {
         "label": "排除的源文件夹",
         "description": "按名称或图库根目录下的精确相对路径跳过匹配文件夹。隐藏路径和应用管理的存储仍会自动排除。",
@@ -263,29 +285,37 @@
       },
       "actionNote": {
         "loading": "正在加载当前应用偏好...",
-        "excludedAndOther": "将文件夹排除规则与其他全局更改一起保存。随后运行一次图库扫描，以便 stories 和排除文件夹正确重新索引。",
+        "excludedAndOther": "将文件夹排除规则与其他全局更改一起保存。随后运行一次图库扫描，以便保留文件夹模式和排除文件夹正确重新索引。",
         "excludedOnly": "这只会保存自定义排除文件夹。随后运行一次图库扫描，以便这些文件夹从索引中消失。",
-        "storiesAndDefaults": "将新的 stories 规则与更新后的全局默认项一起保存。",
-        "storiesOnly": "这只会保存 stories 文件夹规则。随后运行一次图库扫描，以新行为重新建立索引。",
+        "storiesAndDefaults": "将文件夹行为与更新后的全局默认项一起保存。随后运行一次图库扫描，以重新索引受影响的文件夹。",
+        "storiesOnly": "这会保存保留文件夹的处理方式。随后运行一次图库扫描，以所选模式重新建立索引。",
         "multipleDefaults": "一起保存这些全局默认项。语言会立即在当前浏览器中生效；首页访问者仍可在主页上切换模式；短片、应用文件夹和嵌套文件夹标题使用应用默认项。",
         "languageOnly": "这会立即更改当前浏览器中的语言。如需让所选语言也成为整个应用的默认语言，请再保存一次。",
         "homeOnly": "这会更新此应用首页打开时显示的首个动态流模式。访问者仍可从主页切换模式。",
         "reelsOnly": "这会更新此应用打开短片时使用的队列样式。访问者无法从短片页面切换模式。",
         "folderOnly": "这会更新应用文件夹网格使用的默认照片顺序。",
         "nestedFolderTitleOnly": "这会更新整个应用中嵌套应用文件夹的标签显示方式。",
-        "idle": "这些是当前适用于语言、首页、短片、应用文件夹、嵌套文件夹标题、stories 文件夹和排除文件夹的全局默认项。"
+        "carouselReconciliation": "轮播文件夹模式已保存。请完成上方提示的图库操作，将其应用到索引。",
+        "idle": "这些是当前适用于语言、首页、短片、应用文件夹、嵌套文件夹标题、stories 文件夹、轮播文件夹和排除文件夹的全局默认项。"
       },
       "rescanNotice": {
-        "excludedAndStories": "保存这些更改后，请先运行一次图库扫描，再期待 stories 文件夹和排除文件夹更新。",
+        "rebuildRequired": "保存这些更改后，请重建图库索引，以便将所选文件夹行为应用到当前图库位置。",
+        "pendingRebuild": "请重建图库索引，以将已保存的轮播文件夹模式应用到当前图库位置。",
+        "pendingCarousels": "请运行一次图库扫描，将已保存的轮播文件夹模式应用到已索引的文件夹和帖子。",
+        "excludedAndStories": "保存这些更改后，请运行一次图库扫描，以更新保留文件夹行为和排除文件夹。",
         "excludedOnly": "保存此更改后，请先运行一次图库扫描，再期待排除文件夹从索引中消失。",
-        "storiesOnly": "保存此更改后，请先运行一次图库扫描，再期待 stories 文件夹、头像 stories 或精选内容更新。"
+        "storiesOnly": "保存此更改后，请先运行一次图库扫描，再期待 stories 文件夹、头像 stories 或精选内容更新。",
+        "carouselsOnly": "保存此更改后，请先运行一次图库扫描，再期待轮播帖子或 carousels 文件夹更新。",
+        "storiesAndCarousels": "保存这些更改后，请先运行一次图库扫描，再期待 stories 和 carousels 文件夹行为更新。"
       },
       "feedback": {
+        "folderRulesSavedRebuild": "文件夹行为已保存。请重建图库索引，以将其应用到当前图库位置。",
         "settingsAndFolderRulesSaved": "设置已保存。请运行一次图库扫描以应用文件夹规则更改。",
-        "folderRulesAndStoriesSaved": "文件夹排除规则和 stories 文件夹行为已保存。请运行一次图库扫描以应用它们。",
+        "folderRulesSaved": "文件夹行为已保存。请运行一次图库扫描以应用这些更改。",
         "excludedFoldersSaved": "排除文件夹已保存。请运行一次图库扫描以应用它们。",
         "settingsAndStoriesSaved": "设置已保存。请运行一次图库扫描以应用 stories 文件夹更改。",
         "storiesSaved": "stories 文件夹行为已保存。请运行一次图库扫描以应用它。",
+        "carouselsSaved": "轮播文件夹处理方式已保存。请运行一次图库扫描以应用更改。",
         "defaultsSaved": "全局默认项已更新。",
         "languageSaved": "应用语言默认值已保存为{label}。",
         "homeSaved": "首页现在会以 {label} 打开。",
@@ -296,6 +326,7 @@
           "appLanguage": "应用语言",
           "excludedFolders": "排除文件夹",
           "storiesFolderHandling": "stories 文件夹行为",
+          "carouselsFolderHandling": "轮播文件夹处理",
           "homeFeedDefault": "首页动态默认项",
           "reelsFeedDefault": "短片默认项",
           "appFolderOrder": "应用文件夹顺序",
@@ -313,6 +344,11 @@
         "title": "旧版派生资源迁移待处理",
         "messageOne": "{count} 条已索引媒体记录仍在使用旧的镜像缩略图和预览路径。运行“扫描图库”即可将其迁移到资源键存储。",
         "messageOther": "{count} 条已索引媒体记录仍在使用旧的镜像缩略图和预览路径。运行“扫描图库”即可将它们迁移到资源键存储。"
+      },
+      "carouselReconciliation": {
+        "title": "轮播文件夹更新待处理",
+        "scanDescription": "已保存的轮播文件夹模式尚未应用到索引。请运行“扫描图库”以更新文件夹和帖子。",
+        "rebuildDescription": "已保存的轮播文件夹模式尚未应用到索引。请使用下方的“重建图库索引”，将其应用到当前图库位置。"
       },
       "scanCard": {
         "title": "扫描图库",
@@ -334,6 +370,7 @@
         "otherTaskActive": "当前还有其他图库任务正在运行。实时进度会显示在置顶状态栏中。",
         "progress": "实时进度会显示在置顶状态栏中。",
         "legacyMigration": "运行“扫描图库”可将旧的镜像缩略图和预览图迁移到资源键存储布局。",
+        "carouselReconciliation": "运行“扫描图库”，将已保存的轮播文件夹模式应用到已索引的文件夹和帖子。",
         "idle": "扫描会检查新增、更新或缺失的媒体。"
       },
       "thumbnailCard": {
@@ -390,6 +427,11 @@
       }
     },
     "notices": {
+      "scanWarning": {
+        "eyebrow": "扫描警告",
+        "title": "扫描完成，发现 {count} 个结构警告",
+        "title_plural": "扫描完成，发现 {count} 个结构警告"
+      },
       "scanError": {
         "eyebrow": "扫描需要注意",
         "title": "上一次扫描已完成，但包含错误",
@@ -814,6 +856,13 @@
     }
   },
   "post": {
+    "carousel": {
+      "label": "包含 {count} 项的轮播帖子",
+      "position": "{current} / {count}",
+      "previousItem": "上一个轮播项目",
+      "nextItem": "下一个轮播项目",
+      "open": "打开包含 {count} 项的轮播帖子"
+    },
     "captionModal": {
       "title": "编辑说明",
       "captionLabel": "说明",

@@ -154,3 +154,7 @@ The deploy workflow in `.github/workflows/deploy-docs.yml`:
 In production mode, the Express app serves `client/dist` and falls back to the
 SPA entry for non-API routes. Thumbnails and previews continue to be served as
 static files from their configured directories.
+
+## Carousel verification
+
+Focused coverage lives in `server/test/carousel-posts-feature.test.ts` and `server/test/migration-bootstrap.test.ts`. Fixtures should cover reserved and legacy discovery, natural ordering, mixed media, warnings, the 20-item cap, stable post identity, post-wide mutations, and migration metadata preservation. Run server/client tests plus app and documentation builds before shipping carousel changes.

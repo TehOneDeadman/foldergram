@@ -1,4 +1,3 @@
-import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,55 +7,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import sharp from 'sharp';
 
+import { requestTestApp as requestApp } from './http-test-utils.js';
+
 type DatabaseModule = typeof import('../src/db/database.js');
 type AuthServiceModule = typeof import('../src/services/auth-service.js');
-
-async function requestApp(
-  app: express.Application,
-  method: string,
-  urlPath: string,
-  headers: Record<string, string> = {},
-  body?: any
-) {
-  const server = http.createServer(app);
-  await new Promise<void>((resolve, reject) => {
-    server.listen(0, '127.0.0.1', () => resolve());
-    server.on('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string' || !address.port) {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    throw new Error('Failed to obtain a valid server port.');
-  }
-
-  const url = `http://127.0.0.1:${address.port}${urlPath}`;
-
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json', ...headers } : headers,
-      body: body ? JSON.stringify(body) : undefined,
-      redirect: 'manual'
-    });
-
-    let responseBody: any = null;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      responseBody = await res.json();
-    } else {
-      responseBody = await res.text();
-    }
-
-    return {
-      status: res.status,
-      headers: res.headers,
-      body: responseBody
-    };
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-}
 
 describe.sequential('folder share API routes', () => {
   let tempRoot = '';
@@ -93,7 +47,7 @@ describe.sequential('folder share API routes', () => {
     vi.resetModules();
     const { createApp } = await import('../src/app.js');
     ({ authService } = await import('../src/services/auth-service.js'));
-    const { folderRepository, imageRepository, maintenanceRepository } = await import('../src/db/repositories.js');
+    const { folderRepository, imageRepository, maintenanceRepository, postRepository } = await import('../src/db/repositories.js');
 
     maintenanceRepository.resetLibraryIndex();
     authService.setAdminPassword('admin12345');
@@ -147,6 +101,92 @@ describe.sequential('folder share API routes', () => {
       previewPath: 'folder-b/image-b.webp',
       exifJson: null
     });
+
+    const carouselSource = folderRepository.upsert({
+      slug: 'folder-a-carousel-trip',
+      name: 'Trip',
+      folderPath: 'folder-a/carousels/trip',
+      role: 'carousel_source',
+      carouselOwnerFolderId: folderA.id
+    });
+    const carouselItems = [
+      imageRepository.upsert({
+        folderId: carouselSource.id,
+        filename: '01-image.jpg',
+        extension: 'jpg',
+        relativePath: 'folder-a/carousels/trip/01-image.jpg',
+        absolutePath: path.join(tempRoot, 'gallery', 'folder-a', 'carousels', 'trip', '01-image.jpg'),
+        fileSize: 3001,
+        width: 1400,
+        height: 900,
+        mediaType: 'image',
+        mimeType: 'image/jpeg',
+        durationMs: null,
+        fingerprint: 'fp-carousel-image',
+        mtimeMs: Date.now(),
+        firstSeenAt: new Date().toISOString(),
+        sortTimestamp: Date.now() + 1000,
+        takenAt: Date.now(),
+        takenAtSource: 'mtime',
+        thumbnailPath: 'folder-a/carousels/trip/01-image.webp',
+        previewPath: 'folder-a/carousels/trip/01-image.webp',
+        exifJson: JSON.stringify({ latitude: 51.5, longitude: -0.1, cameraModel: 'Private Camera' })
+      }),
+      imageRepository.upsert({
+        folderId: carouselSource.id,
+        filename: '02-animated.gif',
+        extension: 'gif',
+        relativePath: 'folder-a/carousels/trip/02-animated.gif',
+        absolutePath: path.join(tempRoot, 'gallery', 'folder-a', 'carousels', 'trip', '02-animated.gif'),
+        fileSize: 3002,
+        width: 900,
+        height: 900,
+        mediaType: 'image',
+        mimeType: 'image/gif',
+        durationMs: 1200,
+        isAnimated: true,
+        fingerprint: 'fp-carousel-animated',
+        mtimeMs: Date.now(),
+        firstSeenAt: new Date().toISOString(),
+        sortTimestamp: Date.now() + 1000,
+        takenAt: Date.now(),
+        takenAtSource: 'mtime',
+        thumbnailPath: 'folder-a/carousels/trip/02-animated.webp',
+        previewPath: 'folder-a/carousels/trip/02-animated.gif',
+        exifJson: JSON.stringify({ cameraMake: 'Private Make' })
+      }),
+      imageRepository.upsert({
+        folderId: carouselSource.id,
+        filename: '03-video.mp4',
+        extension: 'mp4',
+        relativePath: 'folder-a/carousels/trip/03-video.mp4',
+        absolutePath: path.join(tempRoot, 'gallery', 'folder-a', 'carousels', 'trip', '03-video.mp4'),
+        fileSize: 3003,
+        width: 1920,
+        height: 1080,
+        mediaType: 'video',
+        mimeType: 'video/mp4',
+        durationMs: 5000,
+        fingerprint: 'fp-carousel-video',
+        mtimeMs: Date.now(),
+        firstSeenAt: new Date().toISOString(),
+        sortTimestamp: Date.now() + 1000,
+        takenAt: Date.now(),
+        takenAtSource: 'mtime',
+        thumbnailPath: 'folder-a/carousels/trip/03-video.webp',
+        previewPath: 'folder-a/carousels/trip/03-video.mp4',
+        playbackStrategy: 'original',
+        exifJson: null
+      })
+    ];
+    postRepository.upsertPostWithItems({
+      folderId: folderA.id,
+      sourcePath: 'folder-a/carousels/trip',
+      postType: 'carousel',
+      sortTimestamp: Date.now() + 1000,
+      takenAt: Date.now(),
+      takenAtSource: 'mtime'
+    }, carouselItems.map((image, index) => ({ imageId: image.id, position: index + 1 })));
 
     await fs.mkdir(path.join(tempRoot, 'gallery', 'folder-a'), { recursive: true });
     await fs.mkdir(path.join(tempRoot, 'gallery', 'folder-b'), { recursive: true });
@@ -268,6 +308,20 @@ describe.sequential('folder share API routes', () => {
 
   it('redacts sensitive metadata from shared JSON endpoints', async () => {
     const { folderShareService } = await import('../src/services/folder-share-service.js');
+    const { postRepository } = await import('../src/db/repositories.js');
+    const carousel = postRepository.findBySourcePath('folder-a/carousels/trip')!;
+    const expectRecursivelyRedacted = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(expectRecursivelyRedacted);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      const record = value as Record<string, unknown>;
+      expect(Object.keys(record)).not.toEqual(expect.arrayContaining([
+        'absolutePath', 'exif', 'exifJson', 'originalUrl', 'relativePath', 'sourcePath'
+      ]));
+      Object.values(record).forEach(expectRecursivelyRedacted);
+    };
     const link = folderShareService.createLink('folder-a', { expiresAt: null })!;
     const grant = folderShareService.verifyLinkToken('folder-a', link.rawToken)!;
 
@@ -291,6 +345,7 @@ describe.sequential('folder share API routes', () => {
     expect(imagesRes.body.items[0]).not.toHaveProperty('folderPath');
     expect(imagesRes.body.items[0]).not.toHaveProperty('relativePath');
     expect(imagesRes.body.items[0]).not.toHaveProperty('exif');
+    expectRecursivelyRedacted(imagesRes.body);
 
     // Shared image detail
     const imageDetailRes = await requestApp(app, 'GET', '/api/share/images/1', {
@@ -301,6 +356,86 @@ describe.sequential('folder share API routes', () => {
     expect(imageDetailRes.body).not.toHaveProperty('relativePath');
     expect(imageDetailRes.body).not.toHaveProperty('absolutePath');
     expect(imageDetailRes.body).not.toHaveProperty('exif');
+
+    const carouselDetailRes = await requestApp(app, 'GET', `/api/share/posts/${carousel.id}`, {
+      Cookie: `foldergram_share_session=${shareCookie}`
+    });
+    expect(carouselDetailRes.status).toBe(200);
+    expect(carouselDetailRes.body.mediaItems).toHaveLength(3);
+    expectRecursivelyRedacted(carouselDetailRes.body);
+
+    folderShareService.setPassword('folder-a', 'carousel-password');
+    const passwordGrant = folderShareService.verifyPassword('folder-a', 'carousel-password')!;
+    const passwordResponse = { cookie: vi.fn().mockReturnThis(), setHeader: vi.fn() };
+    folderShareService.setShareSession(
+      passwordResponse as any,
+      { secure: false, get: () => undefined } as any,
+      passwordGrant
+    );
+    const passwordCookie = passwordResponse.cookie.mock.calls.at(-1)?.[1];
+    const passwordDetailRes = await requestApp(app, 'GET', `/api/share/posts/${carousel.id}`, {
+      Cookie: `foldergram_share_session=${passwordCookie}`
+    });
+    expect(passwordDetailRes.status).toBe(200);
+    expectRecursivelyRedacted(passwordDetailRes.body);
+  });
+
+  it('redacts paths and EXIF recursively for anonymous public feed and detail payloads', async () => {
+    const { postRepository } = await import('../src/db/repositories.js');
+    const carousel = postRepository.findBySourcePath('folder-a/carousels/trip')!;
+    authService.setViewerAccess('public');
+
+    const assertNoSensitiveKeys = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(assertNoSensitiveKeys);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      const record = value as Record<string, unknown>;
+      expect(Object.keys(record)).not.toEqual(expect.arrayContaining([
+        'absolutePath', 'exif', 'exifJson', 'relativePath', 'sourcePath'
+      ]));
+      Object.values(record).forEach(assertNoSensitiveKeys);
+    };
+
+    const feedRes = await requestApp(app, 'GET', '/api/feed?mode=recent');
+    expect(feedRes.status).toBe(200);
+    const publicCarousel = feedRes.body.items.find((item: { id: number }) => item.id === carousel.id);
+    expect(publicCarousel?.mediaItems).toHaveLength(3);
+    expect(publicCarousel).toMatchObject({
+      folderPath: 'folder-a',
+      carouselTitle: 'trip'
+    });
+    expect(publicCarousel).not.toHaveProperty('sourcePath');
+    assertNoSensitiveKeys(feedRes.body);
+
+    const detailRes = await requestApp(app, 'GET', `/api/posts/${carousel.id}`);
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.mediaItems).toHaveLength(3);
+    expect(detailRes.body).toMatchObject({
+      folderPath: 'folder-a',
+      carouselTitle: 'trip'
+    });
+    assertNoSensitiveKeys(detailRes.body);
+
+    const adminResponse = { cookie: vi.fn().mockReturnThis(), setHeader: vi.fn() };
+    authService.setAuthenticatedSession(
+      adminResponse as any,
+      { secure: false, get: () => undefined } as any,
+      'admin'
+    );
+    const adminCookie = adminResponse.cookie.mock.calls.at(-1)?.[1];
+    const adminDetailRes = await requestApp(app, 'GET', `/api/posts/${carousel.id}`, {
+      Cookie: `foldergram_session=${adminCookie}`
+    });
+    expect(adminDetailRes.status).toBe(200);
+    expect(adminDetailRes.body).toMatchObject({
+      folderPath: 'folder-a',
+      sourcePath: 'folder-a/carousels/trip',
+      carouselTitle: 'trip'
+    });
+    expect(adminDetailRes.body.mediaItems[0]).toHaveProperty('relativePath');
+    expect(adminDetailRes.body.mediaItems[0]).toHaveProperty('exif');
   });
 
   it('serves shared derivatives (pre-existing and lazy-generated) with Cache-Control: private, no-store and Vary: Cookie', async () => {

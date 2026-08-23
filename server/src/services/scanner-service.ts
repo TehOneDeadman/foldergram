@@ -8,11 +8,13 @@ import pLimit from 'p-limit';
 
 import {
   AVIF_METADATA_REPAIR_VERSION_SETTING_KEY,
+  CAROUSELS_APPLIED_MODE_SETTING_KEY,
   EXCLUDED_FOLDERS_SETTING_KEY,
   LAST_SUCCESSFUL_GALLERY_ROOT_SETTING_KEY,
   LIBRARY_REBUILD_REQUIRED_SETTING_KEY,
   PREVIOUS_GALLERY_ROOT_SETTING_KEY,
-  TREAT_STORIES_AS_FOLDERS_SETTING_KEY
+  TREAT_STORIES_AS_FOLDERS_SETTING_KEY,
+  TREAT_CAROUSELS_AS_FOLDERS_SETTING_KEY
 } from '../constants/app-setting-keys.js';
 import { appConfig } from '../config/env.js';
 import {
@@ -21,6 +23,7 @@ import {
   folderScanStateRepository,
   imageRepository,
   maintenanceRepository,
+  postRepository,
   scanRunRepository
 } from '../db/repositories.js';
 import { generateDerivatives, generateThumbnailDerivative, readMediaMetadata } from './derivative-service.js';
@@ -63,7 +66,14 @@ import {
   parseTreatStoriesAsFoldersSetting
 } from '../utils/stories-utils.js';
 import {
+  findReservedCarouselsOwnerPath,
+  isCarouselsFolderName,
+  parseTreatCarouselsAsFoldersSetting,
+  serializeTreatCarouselsAsFoldersSetting
+} from '../utils/carousels-utils.js';
+import {
   createFolderScanSignature,
+  compareNaturalFilename,
   resolveFullScanOptions,
   shouldQueueDerivativeJobForStatus,
   shouldRefreshUnchangedImage,
@@ -81,6 +91,8 @@ interface ScanSummary {
   updated_files: number;
   removed_files: number;
   error_text: string | null;
+  warning_count: number;
+  warning_text: string | null;
 }
 
 interface DerivativeJob {
@@ -118,6 +130,7 @@ interface ResolvedFolderResult {
 interface ResolvedFolderOptions {
   role?: FolderRole;
   storyOwnerFolderId?: number | null;
+  carouselOwnerFolderId?: number | null;
 }
 
 interface IndexedFolderScanOptions {
@@ -135,7 +148,13 @@ interface IndexedFolderScanOptions {
   logLabel: string;
   role?: FolderRole;
   storyOwnerFolderId?: number | null;
+  carouselOwnerFolderId?: number | null;
   folderHadErrors?: boolean;
+}
+
+interface ReservedCarouselScanResult {
+  ownerFolder: FolderRecord | null;
+  results: SourceFolderScanResult[];
 }
 
 interface IndexedFileReference {
@@ -260,7 +279,9 @@ function createEmptySummary(): ScanSummary {
     new_files: 0,
     updated_files: 0,
     removed_files: 0,
-    error_text: null
+    error_text: null,
+    warning_count: 0,
+    warning_text: null
   };
 }
 
@@ -403,15 +424,20 @@ class ScanErrorCollector {
 
   constructor(
     private readonly runId: number,
-    private readonly reason: string
+    private readonly reason: string,
+    private readonly issueType: 'error' | 'warning' = 'error'
   ) {
     this.reportPath = path.join(
       appConfig.scanErrorReportDir,
-      `scan-${runId}-${sanitizeReportFilenamePart(reason)}.log`
+      `scan-${runId}-${sanitizeReportFilenamePart(reason)}-${issueType}s.log`
     );
   }
 
   get hasErrors(): boolean {
+    return this.count > 0;
+  }
+
+  get hasIssues(): boolean {
     return this.count > 0;
   }
 
@@ -436,7 +462,7 @@ class ScanErrorCollector {
       '',
       'Summary:',
       `Status: ${summary.status}`,
-      `Error count: ${this.count}`,
+      `${this.issueType === 'warning' ? 'Warning' : 'Error'} count: ${this.count}`,
       `Scanned files: ${summary.scanned_files}`,
       `New files: ${summary.new_files}`,
       `Updated files: ${summary.updated_files}`,
@@ -531,8 +557,21 @@ class ScanErrorCollector {
   }
 }
 
+export class ScanBusyError extends Error {
+  constructor(message = 'A scan is already in progress.') {
+    super(message);
+    this.name = 'ScanBusyError';
+  }
+}
+
+export interface EnqueueScanOptions extends Partial<FullScanOptions> {
+  rejectIfBusy?: boolean;
+  beforeEnqueue?: () => void;
+}
+
 class ScannerService {
   private queue = Promise.resolve<ScanSummary>(createEmptySummary());
+  private activeOrQueuedJobs = 0;
   private progress = createIdleProgress(scanRunRepository.latestCompleted() ?? null);
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
@@ -545,6 +584,12 @@ class ScannerService {
 
   isLibraryRebuildRequired(): boolean {
     return appSettingsRepository.get(LIBRARY_REBUILD_REQUIRED_SETTING_KEY) === '1';
+  }
+
+  shouldTreatCarouselsAsFolders(): boolean {
+    return parseTreatCarouselsAsFoldersSetting(
+      appSettingsRepository.get(TREAT_CAROUSELS_AS_FOLDERS_SETTING_KEY)
+    );
   }
 
   handleStartup(reason = 'startup'): StartupAction {
@@ -632,13 +677,13 @@ class ScannerService {
     return 'idle';
   }
 
-  async scanAll(reason = 'manual', options: Partial<FullScanOptions> = {}): Promise<ScanRunRecord | undefined> {
+  async scanAll(reason = 'manual', options: EnqueueScanOptions = {}): Promise<ScanRunRecord | undefined> {
     const resolvedOptions = resolveFullScanOptions({
       allowDerivativeMigration: reason !== 'startup' && !reason.startsWith('watcher'),
       ...options
     });
 
-    await this.enqueue(async () => this.performFullScan(reason, resolvedOptions));
+    await this.enqueue(async () => this.performFullScan(reason, resolvedOptions), options);
     return scanRunRepository.latest();
   }
 
@@ -667,9 +712,21 @@ class ScannerService {
     return scanRunRepository.latest();
   }
 
-  private async enqueue(job: () => Promise<ScanSummary>): Promise<ScanSummary> {
-    this.queue = this.queue.then(job, job);
-    return this.queue;
+  private async enqueue(job: () => Promise<ScanSummary>, options: EnqueueScanOptions = {}): Promise<ScanSummary> {
+    if (options.rejectIfBusy && this.activeOrQueuedJobs > 0) {
+      throw new ScanBusyError();
+    }
+
+    this.activeOrQueuedJobs++;
+    try {
+      if (options.beforeEnqueue) {
+        options.beforeEnqueue();
+      }
+      this.queue = this.queue.then(job, job);
+      return await this.queue;
+    } finally {
+      this.activeOrQueuedJobs--;
+    }
   }
 
   private beginProgress(reason: string, runId: number): void {
@@ -834,6 +891,33 @@ class ScannerService {
     summary.error_text = `${errors.sampleText.slice(0, sampleLimit)}${reportNotice}`;
   }
 
+  private async applyScanWarnings(summary: ScanSummary, warnings: ScanErrorCollector): Promise<void> {
+    if (!warnings.hasIssues) {
+      return;
+    }
+
+    summary.warning_count = warnings.count;
+    let reportNotice = '';
+    const reportResult = await warnings.finalize(summary);
+
+    if (reportResult?.reportPath) {
+      reportNotice = `\n\nFull warning report: ${normalizePath(reportResult.reportPath)}`;
+      log.info(
+        joinLogParts([
+          'Scan warning report written',
+          formatStep('warnings', warnings.count),
+          formatStep('path', normalizePath(reportResult.reportPath))
+        ])
+      );
+    } else if (reportResult?.errorMessage) {
+      reportNotice = `\n\nUnable to write full warning report: ${reportResult.errorMessage}`;
+      log.error('Failed to write scan warning report', reportResult.errorMessage);
+    }
+
+    const sampleLimit = Math.max(0, MAX_SCAN_ERROR_TEXT_LENGTH - reportNotice.length);
+    summary.warning_text = `${warnings.sampleText.slice(0, sampleLimit)}${reportNotice}`;
+  }
+
   private finishUnavailableRun(runId: number, reason: string): ScanSummary {
     const storageState = storageService.refreshAvailability();
     const summary = {
@@ -908,6 +992,7 @@ class ScannerService {
     onSourceFolder: (sourceFolder: SourceFolderCandidate) => Promise<void>,
     currentRelativePath: string | null = null,
     treatStoriesAsFolders = this.shouldTreatStoriesAsFolders(),
+    treatCarouselsAsFolders = this.shouldTreatCarouselsAsFolders(),
     excludedFolderRules = this.getEffectiveExcludedFolderRules()
   ): Promise<void> {
     if (currentRelativePath && matchesExcludedFolder(currentRelativePath, excludedFolderRules)) {
@@ -935,6 +1020,8 @@ class ScannerService {
 
     const childDirectories: Array<{ absolutePath: string; relativePath: string }> = [];
     let hasDirectImages = false;
+    let hasCarouselDirectories = false;
+    let hasStoriesDirectories = false;
 
     for (const entry of entries) {
       const relativeEntryPath = currentRelativePath ? `${currentRelativePath}/${entry.name}` : entry.name;
@@ -945,6 +1032,13 @@ class ScannerService {
       if (entry.isDirectory()) {
         if (this.isManagedGalleryPath(relativeEntryPath) || matchesExcludedFolder(relativeEntryPath, excludedFolderRules)) {
           continue;
+        }
+
+        if (!treatCarouselsAsFolders && isCarouselsFolderName(entry.name)) {
+          hasCarouselDirectories = true;
+        }
+        if (!treatStoriesAsFolders && isStoriesFolderName(entry.name)) {
+          hasStoriesDirectories = true;
         }
 
         childDirectories.push({
@@ -959,7 +1053,7 @@ class ScannerService {
       }
     }
 
-    if (currentRelativePath && hasDirectImages) {
+    if (currentRelativePath && (hasDirectImages || (!treatCarouselsAsFolders && hasCarouselDirectories) || (!treatStoriesAsFolders && hasStoriesDirectories))) {
       const normalizedRelativePath = normalizePath(currentRelativePath);
       this.setProgress({
         discoveredFolders: this.progress.discoveredFolders + 1,
@@ -972,7 +1066,11 @@ class ScannerService {
     }
 
     for (const childDirectory of childDirectories) {
-      if (!treatStoriesAsFolders && currentRelativePath && hasDirectImages && isStoriesFolderName(path.basename(childDirectory.relativePath))) {
+      const childName = path.basename(childDirectory.relativePath);
+      if (!treatStoriesAsFolders && currentRelativePath && hasDirectImages && isStoriesFolderName(childName)) {
+        continue;
+      }
+      if (!treatCarouselsAsFolders && currentRelativePath && isCarouselsFolderName(childName)) {
         continue;
       }
 
@@ -981,6 +1079,7 @@ class ScannerService {
         onSourceFolder,
         childDirectory.relativePath,
         treatStoriesAsFolders,
+        treatCarouselsAsFolders,
         excludedFolderRules
       );
     }
@@ -990,7 +1089,7 @@ class ScannerService {
     const existingFolder = existingFolders.find(
       (folder) => normalizePath(folder.folder_path) === normalizePath(sourceFolderPath)
     );
-    const removedFiles = existingFolder ? imageRepository.markAllDeletedByFolder(existingFolder.id) : 0;
+    const removedFiles = existingFolder ? imageRepository.markAllDeletedByFolder(existingFolder.id, 'single') : 0;
 
     if (existingFolder) {
       folderRepository.setAvatar(existingFolder.id, null, 'auto');
@@ -1103,13 +1202,14 @@ class ScannerService {
     let folderHadErrors = false;
 
     const statFile = async (file: IndexedFileReference) => {
-      activeRelativePaths.push(file.relativePath);
+      const normalizedRelativePath = normalizePath(file.relativePath);
+      activeRelativePaths.push(normalizedRelativePath);
 
       try {
         const stats = await fs.stat(file.absolutePath);
         discoveredFiles.push({
           absolutePath: file.absolutePath,
-          relativePath: file.relativePath,
+          relativePath: normalizedRelativePath,
           stats
         });
       } catch (error) {
@@ -1374,6 +1474,233 @@ class ScannerService {
     return storyResults;
   }
 
+  private async scanReservedCarousels(
+    sourceFolder: SourceFolderCandidate,
+    existingFolders: FolderRecord[],
+    usedSlugs: Set<string>,
+    folderScanStates: Map<string, FolderScanStateRecord>,
+    derivativeJobs: Map<string, DerivativeJob>,
+    errors: ScanErrorCollector,
+    warnings: ScanErrorCollector,
+    options: FullScanOptions,
+    context: ImageProcessingContext,
+    excludedFolderRules: string[]
+  ): Promise<ReservedCarouselScanResult> {
+    const ownerEntries = await fs
+      .readdir(sourceFolder.absolutePath, { withFileTypes: true })
+      .catch((error: unknown) => {
+        const filesystemError = error as NodeJS.ErrnoException;
+        if (filesystemError.code === 'ENOENT') {
+          return null;
+        }
+
+        throw error;
+      });
+
+    if (!ownerEntries) {
+      return { ownerFolder: null, results: [] };
+    }
+
+    const carouselsDirectory = ownerEntries.find((entry) => {
+      if (!entry.isDirectory()) {
+        return false;
+      }
+
+      const relativeEntryPath = normalizePath(`${sourceFolder.relativePath}/${entry.name}`);
+      return (
+        !isHiddenPath(relativeEntryPath) &&
+        !this.isManagedGalleryPath(relativeEntryPath) &&
+        !matchesExcludedFolder(relativeEntryPath, excludedFolderRules) &&
+        isCarouselsFolderName(entry.name)
+      );
+    });
+
+    if (!carouselsDirectory) {
+      return { ownerFolder: null, results: [] };
+    }
+
+    const carouselsAbsolutePath = path.join(sourceFolder.absolutePath, carouselsDirectory.name);
+    const carouselsRelativePath = normalizePath(`${sourceFolder.relativePath}/${carouselsDirectory.name}`);
+    const carouselsEntries = await fs
+      .readdir(carouselsAbsolutePath, { withFileTypes: true })
+      .catch((error: unknown) => {
+        const filesystemError = error as NodeJS.ErrnoException;
+        if (filesystemError.code === 'ENOENT') {
+          return null;
+        }
+
+        throw error;
+      });
+
+    if (!carouselsEntries) {
+      return { ownerFolder: null, results: [] };
+    }
+
+    const carouselResults: SourceFolderScanResult[] = [];
+
+    const rootMediaFiles = carouselsEntries.filter(
+      (entry) => entry.isFile() && isSupportedMediaFile(entry.name) && !entry.name.startsWith('.')
+    );
+    for (const rootFile of rootMediaFiles) {
+      const relPath = normalizePath(`${carouselsRelativePath}/${rootFile.name}`);
+      await warnings.add(
+        formatScanError(
+          relPath,
+          'Direct media files placed inside carousels root directory are ignored. Put media inside post subfolders like carousels/post1/.'
+        )
+      );
+    }
+
+    const carouselPostFolders = carouselsEntries.filter((entry) => {
+      if (!entry.isDirectory()) return false;
+      const relPath = normalizePath(`${carouselsRelativePath}/${entry.name}`);
+      return (
+        !isHiddenPath(relPath) &&
+        !this.isManagedGalleryPath(relPath) &&
+        !matchesExcludedFolder(relPath, excludedFolderRules)
+      );
+    });
+
+    carouselPostFolders.sort((a, b) => compareNaturalFilename(a.name, b.name));
+
+    const activeCarouselPostPaths: string[] = [];
+    let ownerFolder = existingFolders.find((folder) => (
+      folder.role === 'normal' && normalizePath(folder.folder_path) === normalizePath(sourceFolder.relativePath)
+    )) ?? null;
+
+    for (const postEntry of carouselPostFolders) {
+      const postRelativePath = normalizePath(`${carouselsRelativePath}/${postEntry.name}`);
+      const postAbsolutePath = path.join(carouselsAbsolutePath, postEntry.name);
+
+      const postDirEntries = await fs
+        .readdir(postAbsolutePath, { withFileTypes: true })
+        .catch(() => null);
+
+      if (!postDirEntries) continue;
+
+      const nestedDirs = postDirEntries.filter((e) => e.isDirectory() && !e.name.startsWith('.'));
+      for (const nestedDir of nestedDirs) {
+        const nestedRelPath = normalizePath(`${postRelativePath}/${nestedDir.name}`);
+        const nestedMedia = await this.collectRecursiveMediaFiles(
+          path.join(postAbsolutePath, nestedDir.name),
+          nestedRelPath,
+          excludedFolderRules
+        );
+        if (nestedMedia.length > 0) {
+          await warnings.add(
+            formatScanError(nestedRelPath, 'Nested media subfolders inside carousel post directories are ignored.')
+          );
+        }
+      }
+
+      const directMediaEntries = postDirEntries.filter(
+        (e) => e.isFile() && isSupportedMediaFile(e.name) && !e.name.startsWith('.')
+      );
+
+      if (directMediaEntries.length === 0) continue;
+
+      directMediaEntries.sort((a, b) => compareNaturalFilename(a.name, b.name));
+
+      if (directMediaEntries.length === 1) {
+        await warnings.add(formatScanError(postRelativePath, 'Carousel post has only 1 item.'));
+      }
+
+      let validEntries = directMediaEntries;
+      if (validEntries.length > 20) {
+        await warnings.add(
+          formatScanError(
+            postRelativePath,
+            'Carousel post exceeds maximum limit of 20 items. Additional items were skipped.'
+          )
+        );
+        validEntries = validEntries.slice(0, 20);
+      }
+
+      activeCarouselPostPaths.push(postRelativePath);
+
+      if (!ownerFolder) {
+        ownerFolder = this.resolveFolder(existingFolders, usedSlugs, sourceFolder.relativePath).folder;
+      }
+
+      const directFiles = validEntries.map((e) => {
+        const abs = path.join(postAbsolutePath, e.name);
+        return {
+          absolutePath: abs,
+          relativePath: normalizePath(`${postRelativePath}/${e.name}`)
+        };
+      });
+
+      this.setProgress({
+        currentFolder: postRelativePath,
+        discoveredImages: this.progress.discoveredImages + directFiles.length
+      });
+
+      const statResult = await this.statIndexedFiles(directFiles, errors);
+      const result = await this.scanIndexedFolderFiles({
+        folderPath: postRelativePath,
+        scannedFileCount: directFiles.length,
+        activeRelativePaths: statResult.activeRelativePaths,
+        discoveredFiles: statResult.discoveredFiles,
+        existingFolders,
+        usedSlugs,
+        folderScanStates,
+        derivativeJobs,
+        errors,
+        options,
+        context,
+        logLabel: 'Carousel item indexed',
+        role: 'carousel_source',
+        carouselOwnerFolderId: ownerFolder.id,
+        folderHadErrors: statResult.folderHadErrors
+      });
+
+      const indexedImageRecords: ImageRecord[] = [];
+      for (const fileCandidate of statResult.discoveredFiles) {
+        const normalizedRelPath = normalizePath(fileCandidate.relativePath);
+        const imgRecord = imageRepository.getByRelativePath(normalizedRelPath);
+        if (imgRecord) indexedImageRecords.push(imgRecord);
+      }
+      indexedImageRecords.sort((a, b) => compareNaturalFilename(a.filename, b.filename));
+
+      if (indexedImageRecords.length > 0) {
+        const imageIds = indexedImageRecords.map((img) => img.id);
+        const existingPost =
+          postRepository.findByExactImageIds(imageIds) ?? postRepository.findBySourcePath(postRelativePath);
+        const firstItem = indexedImageRecords[0];
+        const newestItemTimestamp = Math.max(...indexedImageRecords.map((image) => image.sort_timestamp));
+        const sortTimestamp = existingPost?.sort_timestamp ?? newestItemTimestamp;
+        const takenAt = firstItem.taken_at ?? null;
+
+        const itemsPayload = indexedImageRecords.map((img, idx) => ({
+          imageId: img.id,
+          position: idx + 1
+        }));
+        postRepository.upsertPostWithItems({
+          existingPostId: existingPost?.id,
+          id: !existingPost && indexedImageRecords.length === 1 ? firstItem.id : undefined,
+          folderId: ownerFolder.id,
+          placeId: firstItem.place_id,
+          postType: indexedImageRecords.length > 1 ? 'carousel' : 'single',
+          sourcePath: postRelativePath,
+          caption: existingPost?.caption ?? null,
+          takenAt,
+          takenAtSource: firstItem.taken_at_source,
+          sortTimestamp,
+          isDeleted: 0,
+          isTrashed: 0
+        }, itemsPayload);
+      }
+
+      carouselResults.push(result);
+    }
+
+    if (ownerFolder) {
+      postRepository.softDeleteMissingReservedCarousels(ownerFolder.id, carouselsRelativePath, activeCarouselPostPaths);
+    }
+
+    return { ownerFolder, results: carouselResults };
+  }
+
   private async scanIndexedFolderFiles({
     folderPath,
     scannedFileCount,
@@ -1388,6 +1715,7 @@ class ScannerService {
     context,
     role = 'normal',
     storyOwnerFolderId = null,
+    carouselOwnerFolderId = null,
     folderHadErrors = false
   }: IndexedFolderScanOptions): Promise<SourceFolderScanResult> {
     const normalizedFolderPath = normalizePath(folderPath);
@@ -1396,7 +1724,8 @@ class ScannerService {
       if (activeRelativePaths.length > 0) {
         const resolvedFolder = this.resolveFolder(existingFolders, usedSlugs, normalizedFolderPath, {
           role,
-          storyOwnerFolderId
+          storyOwnerFolderId,
+          carouselOwnerFolderId
         });
 
         return {
@@ -1420,7 +1749,8 @@ class ScannerService {
 
     const resolvedFolder = this.resolveFolder(existingFolders, usedSlugs, normalizedFolderPath, {
       role,
-      storyOwnerFolderId
+      storyOwnerFolderId,
+      carouselOwnerFolderId
     });
     const folder = resolvedFolder.folder;
     let unchangedFiles = 0;
@@ -1695,6 +2025,7 @@ class ScannerService {
     const runId = scanRunRepository.start();
     const summary = createEmptySummary();
     const errors = new ScanErrorCollector(runId, reason);
+    const warnings = new ScanErrorCollector(runId, reason, 'warning');
     const derivativeJobs = new Map<string, DerivativeJob>();
     const metrics: FullScanMetrics = {
       folderShortcutHits: 0,
@@ -1733,6 +2064,7 @@ class ScannerService {
       rebuildDerivativeReuseIndex: contextOptions.rebuildDerivativeReuseIndex
     };
     const treatStoriesAsFolders = this.shouldTreatStoriesAsFolders();
+    const treatCarouselsAsFolders = this.shouldTreatCarouselsAsFolders();
     const excludedFolderRules = this.getEffectiveExcludedFolderRules();
 
     if (!storageService.refreshAvailability().libraryAvailable) {
@@ -1750,6 +2082,7 @@ class ScannerService {
         formatStep('avif-repair', formatToggle(avifMetadataRepairPending)),
         formatStep('media-errors', appConfig.scanMediaErrorMode),
         formatStep('stories-as-folders', formatToggle(treatStoriesAsFolders)),
+        formatStep('carousels-as-folders', formatToggle(treatCarouselsAsFolders)),
         excludedFolderRules.length > 0 ? formatStep('excluded-folders', excludedFolderRules.join(',')) : null,
         appConfig.managedGalleryRelativeIgnores.length > 0
           ? formatStep('ignored-managed-paths', appConfig.managedGalleryRelativeIgnores.join(','))
@@ -1836,6 +2169,9 @@ class ScannerService {
         !galleryRootChanged && migrationSummary.complete && derivativeMigrationService.isMigrationComplete();
 
       const existingFolders = folderRepository.getAll();
+      if (treatCarouselsAsFolders) {
+        postRepository.softDeleteReservedCarouselsForLegacyMode();
+      }
       if (galleryRootChanged && normalizedStoredGalleryRoot && existingFolders.length > 0) {
         this.markLibraryRebuildRequired(normalizedStoredGalleryRoot);
         log.info(
@@ -1926,7 +2262,35 @@ class ScannerService {
           );
 
           for (const storyResult of storyResults) {
+            if (storyResult.folder) discoveredFolderIds.add(storyResult.folder.id);
             applyScanResult(storyResult);
+          }
+        }
+
+        if (!treatCarouselsAsFolders) {
+          const carouselScan = await this.scanReservedCarousels(
+            sourceFolder,
+            existingFolders,
+            usedSlugs,
+            folderScanStates,
+            derivativeJobs,
+            errors,
+            warnings,
+            options,
+            imageProcessingContext,
+            excludedFolderRules
+          );
+          const ownerFolder = carouselScan.ownerFolder ?? result.folder;
+          const carouselResults = carouselScan.results;
+
+          if (carouselResults.length > 0 && ownerFolder) {
+            activeFolderPaths.add(sourceFolder.relativePath);
+            discoveredFolderIds.add(ownerFolder.id);
+          }
+
+          for (const carouselResult of carouselResults) {
+            if (carouselResult.folder) discoveredFolderIds.add(carouselResult.folder.id);
+            applyScanResult(carouselResult);
           }
         }
 
@@ -1934,7 +2298,7 @@ class ScannerService {
           processedFolders: this.progress.processedFolders + 1
         });
         this.logProgress('folder');
-      }, null, treatStoriesAsFolders, excludedFolderRules);
+      }, null, treatStoriesAsFolders, treatCarouselsAsFolders, excludedFolderRules);
 
       for (const folder of existingFolders) {
         if (!discoveredFolderIds.has(folder.id)) {
@@ -1942,6 +2306,8 @@ class ScannerService {
           folderRepository.setAvatar(folder.id, null, 'auto');
         }
       }
+
+      postRepository.syncRepresentativePlaces();
 
       metrics.removedFolderStateRows = folderScanStateRepository.deleteMissing([...activeFolderPaths]);
 
@@ -1971,9 +2337,19 @@ class ScannerService {
     }
 
     await this.applyScanErrors(summary, errors);
+    await this.applyScanWarnings(summary, warnings);
 
     if (summary.status !== 'failed') {
-      appSettingsRepository.set(LAST_SUCCESSFUL_GALLERY_ROOT_SETTING_KEY, currentGalleryRoot);
+      appSettingsRepository.setMany([
+        {
+          key: LAST_SUCCESSFUL_GALLERY_ROOT_SETTING_KEY,
+          value: currentGalleryRoot
+        },
+        {
+          key: CAROUSELS_APPLIED_MODE_SETTING_KEY,
+          value: serializeTreatCarouselsAsFoldersSetting(treatCarouselsAsFolders)
+        }
+      ]);
     }
 
     if (summary.status === 'completed' && avifMetadataRepairPending) {
@@ -2032,6 +2408,12 @@ class ScannerService {
       }
 
       if (!treatStoriesAsFolders && findReservedStoriesOwnerPath(relativePath)) {
+        fallbackReason = `${reason}:fallback`;
+        break;
+      }
+
+      const treatCarouselsAsFolders = this.shouldTreatCarouselsAsFolders();
+      if (!treatCarouselsAsFolders && findReservedCarouselsOwnerPath(relativePath)) {
         fallbackReason = `${reason}:fallback`;
         break;
       }
@@ -2104,6 +2486,7 @@ class ScannerService {
       }
 
       if (fallbackReason === null) {
+        postRepository.syncRepresentativePlaces();
         await this.processDerivativeJobs([...derivativeJobs.values()], errors);
       }
     } catch (error) {
@@ -2288,6 +2671,7 @@ class ScannerService {
     const folderName = getFolderDisplayInfo(normalizedFolderPath).name;
     const role = options.role ?? 'normal';
     const storyOwnerFolderId = options.storyOwnerFolderId ?? null;
+    const carouselOwnerFolderId = options.carouselOwnerFolderId ?? null;
 
     if (existingByFolder) {
       usedSlugs.delete(existingByFolder.slug);
@@ -2299,7 +2683,8 @@ class ScannerService {
       name: folderName,
       folderPath: normalizedFolderPath,
       role,
-      storyOwnerFolderId
+      storyOwnerFolderId,
+      carouselOwnerFolderId
     });
     this.rememberFolder(existingFolders, saved.folder);
     return {

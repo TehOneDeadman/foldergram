@@ -26,6 +26,7 @@ describe.sequential('gallery folder deletion', () => {
   let galleryService: GalleryServiceModule['galleryService'];
   let folderRepository: RepositoriesModule['folderRepository'];
   let imageRepository: RepositoriesModule['imageRepository'];
+  let postRepository: RepositoriesModule['postRepository'];
   let folderScanStateRepository: RepositoriesModule['folderScanStateRepository'];
   let maintenanceRepository: RepositoriesModule['maintenanceRepository'];
 
@@ -47,6 +48,7 @@ describe.sequential('gallery folder deletion', () => {
     ({
       folderRepository,
       imageRepository,
+      postRepository,
       folderScanStateRepository,
       maintenanceRepository
     } = await import('../src/db/repositories.js'));
@@ -158,7 +160,123 @@ describe.sequential('gallery folder deletion', () => {
     await expectPathMissing(path.join(appConfig.previewsDir, 'parent'));
   });
 
-  async function createIndexedFolder(relativeFolderPath: string, filenames: string[]): Promise<{
+  it('deletes owned carousel originals, derivatives, source folders, and database rows in default mode', async () => {
+    const owner = await createIndexedFolder('album', ['normal.jpg']);
+    const firstCarousel = await createIndexedFolder('album/carousels/first', ['01.jpg', '02.jpg'], {
+      role: 'carousel_source',
+      carouselOwnerFolderId: owner.folder.id
+    });
+    const secondCarousel = await createIndexedFolder('album/carousels/second', ['01.jpg', '02.jpg'], {
+      role: 'carousel_source',
+      carouselOwnerFolderId: owner.folder.id
+    });
+    for (const carousel of [firstCarousel, secondCarousel]) {
+      postRepository.upsertPostWithItems({
+        folderId: owner.folder.id,
+        sourcePath: carousel.folder.folder_path,
+        postType: 'carousel',
+        sortTimestamp: carousel.images[0].sort_timestamp,
+        isDeleted: 0,
+        isTrashed: 0
+      }, carousel.images.map((image, index) => ({ imageId: image.id, position: index + 1 })));
+    }
+
+    const result = await galleryService.deleteFolder('album');
+    expect(result).toEqual({
+      slug: 'album',
+      deletedImageCount: 5,
+      deletedFolderCount: 1,
+      deletedSourceFolder: false
+    });
+    expect(folderRepository.getBySlug('album')).toBeUndefined();
+    expect(folderRepository.getByFolderPath('album/carousels/first')).toBeUndefined();
+    expect(folderRepository.getByFolderPath('album/carousels/second')).toBeUndefined();
+    expect(postRepository.countAll()).toBe(0);
+    for (const image of [...owner.images, ...firstCarousel.images, ...secondCarousel.images]) {
+      expect(imageRepository.getById(image.id)).toBeUndefined();
+    }
+    await expectPathMissing(path.join(appConfig.galleryRoot, 'album'));
+    await expectPathMissing(path.join(appConfig.thumbnailsDir, 'album'));
+    await expectPathMissing(path.join(appConfig.previewsDir, 'album'));
+  });
+
+  it('includes owned carousel sources in full source-subtree deletion counts', async () => {
+    const owner = await createIndexedFolder('album', ['normal.jpg']);
+    const firstCarousel = await createIndexedFolder('album/carousels/first', ['01.jpg', '02.jpg'], {
+      role: 'carousel_source',
+      carouselOwnerFolderId: owner.folder.id
+    });
+    const secondCarousel = await createIndexedFolder('album/carousels/second', ['01.jpg', '02.jpg'], {
+      role: 'carousel_source',
+      carouselOwnerFolderId: owner.folder.id
+    });
+    await fs.writeFile(path.join(appConfig.galleryRoot, 'album', 'notes.txt'), 'also removed');
+
+    const result = await galleryService.deleteFolder('album', { deleteSourceFolder: true });
+    expect(result).toEqual({
+      slug: 'album',
+      deletedImageCount: 5,
+      deletedFolderCount: 3,
+      deletedSourceFolder: true
+    });
+    expect(folderRepository.getBySlug('album')).toBeUndefined();
+    expect(folderRepository.getByFolderPath(firstCarousel.folder.folder_path)).toBeUndefined();
+    expect(folderRepository.getByFolderPath(secondCarousel.folder.folder_path)).toBeUndefined();
+    await expectPathMissing(path.join(appConfig.galleryRoot, 'album'));
+    await expectPathMissing(path.join(appConfig.thumbnailsDir, 'album'));
+    await expectPathMissing(path.join(appConfig.previewsDir, 'album'));
+  });
+
+  it.each([
+    { mode: 'default', deleteSourceFolder: false, deletedFolderCount: 1 },
+    { mode: 'full subtree', deleteSourceFolder: true, deletedFolderCount: 2 }
+  ])('removes soft-deleted and trashed carousel derivatives during $mode deletion', async ({
+    deleteSourceFolder,
+    deletedFolderCount
+  }) => {
+    const owner = await createIndexedFolder('album', ['normal.jpg']);
+    const carousel = await createIndexedFolder('album/carousels/video-post', ['cover.jpg', 'clip.mp4'], {
+      role: 'carousel_source',
+      carouselOwnerFolderId: owner.folder.id
+    });
+    const post = postRepository.upsertPostWithItems({
+      folderId: owner.folder.id,
+      sourcePath: carousel.folder.folder_path,
+      postType: 'carousel',
+      sortTimestamp: carousel.images[0].sort_timestamp,
+      isDeleted: 0,
+      isTrashed: 0
+    }, carousel.images.map((image, index) => ({ imageId: image.id, position: index + 1 })));
+
+    expect(postRepository.trashPost(post.id)).toBe(true);
+    const softDeletedVideo = carousel.images.find((image) => image.media_type === 'video')!;
+    imageRepository.markDeleted(softDeletedVideo.relative_path);
+    await fs.rm(softDeletedVideo.absolute_path);
+    expect(softDeletedVideo.preview_path).toMatch(/\.mp4$/);
+    await expectPathPresent(path.join(appConfig.thumbnailsDir, softDeletedVideo.thumbnail_path));
+    await expectPathPresent(path.join(appConfig.previewsDir, softDeletedVideo.preview_path));
+
+    const result = await galleryService.deleteFolder('album', { deleteSourceFolder });
+    expect(result).toEqual({
+      slug: 'album',
+      deletedImageCount: 3,
+      deletedFolderCount,
+      deletedSourceFolder: deleteSourceFolder
+    });
+
+    for (const image of [...owner.images, ...carousel.images]) {
+      expect(imageRepository.getById(image.id)).toBeUndefined();
+      await expectPathMissing(path.join(appConfig.galleryRoot, image.relative_path));
+      await expectPathMissing(path.join(appConfig.thumbnailsDir, image.thumbnail_path));
+      await expectPathMissing(path.join(appConfig.previewsDir, image.preview_path));
+    }
+  });
+
+  async function createIndexedFolder(
+    relativeFolderPath: string,
+    filenames: string[],
+    options: { role?: 'normal' | 'carousel_source'; carouselOwnerFolderId?: number | null } = {}
+  ): Promise<{
     folder: FolderRecord;
     images: ImageRecord[];
   }> {
@@ -167,7 +285,9 @@ describe.sequential('gallery folder deletion', () => {
     const folder = folderRepository.upsert({
       slug,
       name: folderName,
-      folderPath: relativeFolderPath
+      folderPath: relativeFolderPath,
+      role: options.role,
+      carouselOwnerFolderId: options.carouselOwnerFolderId
     });
     const images: ImageRecord[] = [];
 

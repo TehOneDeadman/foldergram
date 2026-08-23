@@ -109,3 +109,31 @@ export function shouldRefreshUnchangedImage(input: UnchangedImageRefreshDecision
 
   return input.galleryRootChanged || input.absolutePathChanged;
 }
+
+const primaryCollator = new Intl.Collator('en', {
+  numeric: true,
+  sensitivity: 'base',
+  usage: 'sort'
+});
+
+const secondaryCollator = new Intl.Collator('en', {
+  numeric: true,
+  sensitivity: 'variant',
+  usage: 'sort'
+});
+
+export function compareNaturalFilename(a: string, b: string): number {
+  const primary = primaryCollator.compare(a, b);
+  if (primary !== 0) return primary;
+
+  const secondary = secondaryCollator.compare(a, b);
+  if (secondary !== 0) return secondary;
+
+  const normA = a.normalize('NFKD');
+  const normB = b.normalize('NFKD');
+  if (normA !== normB) {
+    return normA < normB ? -1 : 1;
+  }
+
+  return a < b ? -1 : a > b ? 1 : 0;
+}

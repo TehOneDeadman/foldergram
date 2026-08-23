@@ -207,9 +207,11 @@ describe.sequential('bookmark collections', () => {
     const trashed = await createIndexedMedia('visible', 'trashed.jpg', 1_800_000_023_000);
     const story = await createIndexedMedia('story-capsule', 'story.jpg', 1_800_000_024_000, 'story_capsule');
 
-    for (const image of [visible, cover, deleted, trashed, story]) {
-      expect(galleryService.saveImage(image.id)).toMatchObject({ imageId: image.id, isSaved: true });
+    for (const image of [visible, deleted, trashed]) {
+      expect(galleryService.saveImage(image.id, { isLegacyImageAlias: true })).toMatchObject({ imageId: image.id, isSaved: true });
     }
+    expect(galleryService.saveImage(cover.id, { isLegacyImageAlias: true })).toBeNull();
+    expect(galleryService.saveImage(story.id, { isLegacyImageAlias: true })).toBeNull();
     imageRepository.markDeleted(deleted.relative_path);
     imageRepository.moveToTrash(trashed.id);
 
@@ -217,7 +219,7 @@ describe.sequential('bookmark collections', () => {
     expect(saved?.total).toBe(1);
     expect(saved?.items.map((item) => item.id)).toEqual([visible.id]);
     expect(collectionRepository.isImageSaved(deleted.id)).toBe(true);
-    expect(collectionRepository.isImageSaved(story.id)).toBe(true);
+    expect(collectionRepository.isImageSaved(story.id)).toBe(false);
   });
 
   it('restores collection listing when a soft-deleted image reappears', async () => {

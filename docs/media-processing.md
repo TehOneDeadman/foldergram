@@ -226,3 +226,7 @@ gallery tree. That lets Foldergram:
 - preserve the same thumbnail and preview paths when a media item is moved
 - migrate existing derivatives in place instead of regenerating everything
 - garbage-collect stale derivatives by indexed asset reference instead of by mirrored folder tree
+
+## Carousel items
+
+Every included carousel item uses the normal thumbnail, preview, poster, and lazy-generation pipeline. Position 1 supplies the feed/grid cover; later items are fitted inside the shared stage without modifying originals. Only the first 20 naturally sorted supported files are indexed, and skipped extras do not enter derivative queues.

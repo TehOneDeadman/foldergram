@@ -55,6 +55,27 @@ export interface UpdateExcludedFoldersSettingResult extends ExcludedFoldersSetti
   requiresScan: boolean;
 }
 
+export type PostType = 'single' | 'carousel';
+
+export interface PostMediaItem {
+  imageId: number;
+  position: number;
+  filename: string;
+  mediaType: MediaType;
+  width: number;
+  height: number;
+  durationMs: number | null;
+  isAnimated: boolean | null;
+  thumbnailUrl: string;
+  previewUrl: string;
+  playbackStrategy?: 'preview' | 'original' | null;
+  originalUrl?: string;
+  mimeType?: string;
+  fileSize?: number;
+  relativePath?: string;
+  exif?: ImageExifData | null;
+}
+
 export interface FeedItem {
   id: number;
   folderId: number;
@@ -64,7 +85,10 @@ export interface FeedItem {
   folderPath: string;
   folderBreadcrumb: string | null;
   filename: string;
+  sourcePath?: string;
   caption?: string | null;
+  carouselTitle?: string | null;
+  postType?: PostType;
   width: number;
   height: number;
   mediaType: 'image' | 'video';
@@ -76,6 +100,8 @@ export interface FeedItem {
   takenAt: number | null;
   isSaved?: boolean;
   place?: PlaceSummary | null;
+  mediaItems?: PostMediaItem[];
+  itemCount?: number;
 }
 
 export type PlaceKind = 'city' | 'approximate_spot' | 'manual';
@@ -280,6 +306,7 @@ export interface SharedFolderSummary {
   name: string;
   description: string | null;
   imageCount: number;
+  postCount: number;
   videoCount: number;
   avatarThumbnailUrl: string | null;
   sortTimestamp: number;
@@ -292,6 +319,7 @@ export interface SharedFeedItem {
   folderName: string;
   filename: string;
   caption: string | null;
+  carouselTitle?: string | null;
   width: number;
   height: number;
   mediaType: MediaType;
@@ -300,6 +328,9 @@ export interface SharedFeedItem {
   thumbnailUrl: string;
   previewUrl: string;
   sortTimestamp: number;
+  postType?: PostType;
+  itemCount?: number;
+  mediaItems?: PostMediaItem[];
 }
 
 export interface SharedImageDetail {
@@ -309,6 +340,7 @@ export interface SharedImageDetail {
   folderName: string;
   filename: string;
   caption: string | null;
+  carouselTitle?: string | null;
   mediaType: MediaType;
   mimeType: string;
   width: number;
@@ -320,6 +352,9 @@ export interface SharedImageDetail {
   sortTimestamp: number;
   nextImageId: number | null;
   previousImageId: number | null;
+  postType?: PostType;
+  itemCount?: number;
+  mediaItems?: PostMediaItem[];
 }
 
 export interface SharedFolderImagesPayload {
@@ -479,6 +514,8 @@ export interface ScanRunSummary {
   updated_files: number;
   removed_files: number;
   error_text: string | null;
+  warning_count: number;
+  warning_text: string | null;
 }
 
 export interface ScanProgress {
@@ -526,6 +563,9 @@ export interface RebuildThumbnailsResult {
 export interface AppStatus {
   folders: number;
   indexedImages: number;
+  indexedPosts: number;
+  indexedMediaAssets: number;
+  indexedCarousels: number;
   indexedVideos: number;
   scan: ScanProgress;
   storage: {
@@ -544,10 +584,16 @@ export interface AppStatus {
     defaultFolderImageOrder?: FolderImageOrder;
     nestedFolderTitleFormat?: NestedFolderTitleFormat;
     treatStoriesAsFolders: boolean;
+    treatCarouselsAsFolders: boolean;
   };
   storiesMigration: {
     hasLegacyStoriesCandidates: boolean;
     decisionPending: boolean;
+  };
+  carouselsMigration: {
+    hasLegacyCarouselsCandidates: boolean;
+    decisionPending: boolean;
+    reconciliationPending?: boolean;
   };
 }
 

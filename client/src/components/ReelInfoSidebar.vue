@@ -138,7 +138,10 @@ const hasExplicitItemCaption = computed(() => Object.hasOwn(props.item, 'caption
 const caption = computed(() =>
   resolveDisplayCaption({
     filename: props.item.filename,
-    caption: hasExplicitItemCaption.value ? props.item.caption ?? null : detail.value?.caption
+    caption: hasExplicitItemCaption.value ? props.item.caption ?? null : detail.value?.caption,
+    postType: props.item.postType,
+    sourcePath: props.item.sourcePath,
+    carouselTitle: props.item.carouselTitle
   })
 );
 const formattedDate = computed(() =>

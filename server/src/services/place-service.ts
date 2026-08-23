@@ -4,7 +4,7 @@ import { inflateRawSync } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 
 import { appConfig } from '../config/env.js';
-import { imageRepository, placeRepository } from '../db/repositories.js';
+import { imageRepository, placeRepository, postRepository } from '../db/repositories.js';
 import type { ImageRecord, PlaceDetail, PlaceRecord, PlaceSummary } from '../types/models.js';
 import { deserializeImageExifData } from '../utils/exif-utils.js';
 import { resolveUniqueSlug, slugifyFolderName } from '../utils/slug.js';
@@ -523,6 +523,8 @@ export const placeResolutionService = {
         }
       }
     }
+
+    postRepository.syncRepresentativePlaces();
 
     return {
       processed,

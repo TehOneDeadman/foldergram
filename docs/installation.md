@@ -121,7 +121,7 @@ mode with admin unlock.
 
 The Settings sidebar separates app-wide preferences from maintenance actions:
 
-- `General Settings` contains app language, stories mode, nested folder title format, excluded folders, Home/Reels defaults, and the default folder photo order
+- `General Settings` contains app language, stories and carousel folder modes, nested folder title format, excluded folders, Home/Reels defaults, and the default folder photo order
 - `Places` contains offline place-data preparation and place-assignment rebuilds for GPS-tagged photos
 - `Scan & Library` contains manual scan plus rebuild actions
 

@@ -149,6 +149,22 @@
         "helper": "Elige aquí un modo y luego guárdalo abajo. Después ejecuta un escaneo de la biblioteca para que la estructura indexada coincida.",
         "helperSaving": "Espera a que termine la actualización actual de ajustes."
       },
+      "carouselsMigration": {
+        "eyebrow": "Migración de carruseles",
+        "title": "Esta biblioteca puede usar carpetas llamadas carousels",
+        "description": "Elige si AppFolder/carousels debe crear publicaciones con varios elementos o seguir como carpetas normales.",
+        "useFeature": "Usar publicaciones carrusel",
+        "keepFolders": "Mantener carpetas normales",
+        "helper": "Elige un modo y guárdalo abajo. Después, ejecuta un escaneo de la biblioteca para que las carpetas indexadas y las publicaciones carrusel coincidan."
+      },
+      "carouselsAnnouncement": {
+        "title": "Publicaciones carrusel",
+        "headline": "Las carpetas reservadas carousels/ pueden combinar varios archivos en una publicación",
+        "description": "Crea una carpeta hija directa dentro de AppFolder/carousels para cada carrusel y coloca directamente en ella entre 2 y 20 imágenes, imágenes animadas o vídeos. El orden natural de los nombres determina las diapositivas y el primer elemento se convierte en la portada. Los prefijos numéricos son opcionales.",
+        "dismissAria": "Descartar anuncio de publicaciones carrusel",
+        "showStructure": "Ver estructura de directorios de carruseles",
+        "hideStructure": "Ocultar estructura de directorios de carruseles"
+      },
       "announcement": {
         "title": "Stories",
         "headline": "Las carpetas reservadas stories/ pueden alimentar las stories de las carpetas de la app",
@@ -250,6 +266,12 @@
         "enabledDescription": "El modo heredado está activado. Las carpetas stories siguen siendo carpetas normales de la app en todas partes.",
         "disabledDescription": "El modo reservado de stories está activado. AppFolder/stories alimenta las stories del avatar y los círculos destacados."
       },
+      "carouselsMode": {
+        "label": "Tratar las carpetas carousels como carpetas normales",
+        "toggleLabel": "Cambiar el comportamiento de las carpetas carousels",
+        "enabledDescription": "El modo heredado está activo. Las carpetas carousels siguen siendo carpetas normales.",
+        "disabledDescription": "El modo carrusel está activo. Cada hijo directo de AppFolder/carousels se convierte en una publicación."
+      },
       "excludedFolders": {
         "label": "Carpetas de origen excluidas",
         "description": "Omite carpetas coincidentes en cualquier lugar por nombre o por ruta relativa exacta bajo la raíz de la galería. Las rutas ocultas y el almacenamiento administrado por la app siguen excluyéndose automáticamente.",
@@ -263,29 +285,37 @@
       },
       "actionNote": {
         "loading": "Cargando las preferencias actuales de la app...",
-        "excludedAndOther": "Guarda las reglas de exclusión de carpetas junto con los otros cambios de toda la app. Después ejecuta un escaneo de la biblioteca para que stories y carpetas excluidas se reindexen correctamente.",
+        "excludedAndOther": "Guarda las reglas de exclusión de carpetas junto con los otros cambios de toda la app. Después, ejecuta un escaneo de la biblioteca para reindexar correctamente los modos de carpetas reservadas y las carpetas excluidas.",
         "excludedOnly": "Esto solo guarda las carpetas excluidas personalizadas. Después ejecuta un escaneo de la biblioteca para que esas carpetas desaparezcan del índice.",
-        "storiesAndDefaults": "Guarda juntos la nueva regla de stories y los valores globales actualizados.",
-        "storiesOnly": "Esto solo guarda la regla de carpetas stories. Después ejecuta un escaneo de la biblioteca para reindexar con el nuevo comportamiento.",
+        "storiesAndDefaults": "Guarda juntos el comportamiento de las carpetas y los valores globales actualizados. Después, ejecuta un escaneo de la biblioteca para reindexar las carpetas afectadas.",
+        "storiesOnly": "Esto guarda el comportamiento de las carpetas reservadas. Después, ejecuta un escaneo de la biblioteca para reindexar con el modo seleccionado.",
         "multipleDefaults": "Guarda juntos estos valores globales. El idioma se aplica de inmediato en este navegador; los visitantes de Inicio aún pueden cambiar de modo en la página principal; Reels, las carpetas de la app y los títulos de carpetas anidadas usan los valores predeterminados de la app.",
         "languageOnly": "Esto cambia el idioma de inmediato en este navegador. Guárdalo también si quieres que el idioma seleccionado se convierta en el predeterminado de toda la app.",
         "homeOnly": "Esto actualiza el primer modo de feed que se muestra en Inicio para esta app. Los visitantes aún pueden cambiar de modo desde la página principal.",
         "reelsOnly": "Esto actualiza el estilo de cola usado cuando se abre Reels para esta app. Los visitantes no pueden cambiar de modo desde la página de Reels.",
         "folderOnly": "Esto actualiza el orden de fotos predeterminado usado por las cuadrículas de carpetas de la app.",
         "nestedFolderTitleOnly": "Esto actualiza cómo se etiquetan las carpetas anidadas de la app en toda la aplicación.",
-        "idle": "Estos son los valores actuales de toda la app para idioma, Inicio, Reels, carpetas de la app, títulos de carpetas anidadas, carpetas stories y carpetas excluidas."
+        "carouselReconciliation": "El modo de las carpetas de carrusel está guardado. Completa la acción de biblioteca indicada arriba para aplicarlo al índice.",
+        "idle": "Estos son los valores actuales de toda la app para idioma, Inicio, Reels, carpetas de la app, títulos de carpetas anidadas, carpetas stories, carpetas de carrusel y carpetas excluidas."
       },
       "rescanNotice": {
-        "excludedAndStories": "Guarda estos cambios y luego ejecuta un escaneo de la biblioteca antes de esperar que se actualicen las carpetas stories y las carpetas excluidas.",
+        "rebuildRequired": "Guarda estos cambios y luego reconstruye el índice de la biblioteca para aplicar el comportamiento de carpetas seleccionado a la ubicación actual de la galería.",
+        "pendingRebuild": "Reconstruye el índice de la biblioteca para aplicar el modo guardado de las carpetas de carrusel a la ubicación actual de la galería.",
+        "pendingCarousels": "Ejecuta un escaneo de la biblioteca para aplicar el modo guardado de las carpetas de carrusel a las carpetas y publicaciones indexadas.",
+        "excludedAndStories": "Guarda estos cambios y luego ejecuta un escaneo de la biblioteca para actualizar el comportamiento de las carpetas reservadas y las carpetas excluidas.",
         "excludedOnly": "Guarda este cambio y luego ejecuta un escaneo de la biblioteca antes de que las carpetas excluidas desaparezcan del índice.",
-        "storiesOnly": "Guarda este cambio y luego ejecuta un escaneo de la biblioteca antes de esperar que se actualicen las carpetas stories, las stories del avatar o los destacados."
+        "storiesOnly": "Guarda este cambio y luego ejecuta un escaneo de la biblioteca antes de esperar que se actualicen las carpetas stories, las stories del avatar o los destacados.",
+        "carouselsOnly": "Guarda este cambio y luego ejecuta un escaneo de la biblioteca antes de esperar que se actualicen las publicaciones carrusel o las carpetas carousels.",
+        "storiesAndCarousels": "Guarda estos cambios y luego ejecuta un escaneo de la biblioteca antes de esperar que se actualice el comportamiento de las carpetas stories y carousels."
       },
       "feedback": {
+        "folderRulesSavedRebuild": "Se guardó el comportamiento de las carpetas. Reconstruye el índice de la biblioteca para aplicarlo a la ubicación actual de la galería.",
         "settingsAndFolderRulesSaved": "Los ajustes se guardaron. Ejecuta un escaneo de la biblioteca para aplicar los cambios de reglas de carpetas.",
-        "folderRulesAndStoriesSaved": "Se guardaron las reglas de exclusión de carpetas y el comportamiento de las carpetas stories. Ejecuta un escaneo de la biblioteca para aplicarlos.",
+        "folderRulesSaved": "Se guardó el comportamiento de las carpetas. Ejecuta un escaneo de la biblioteca para aplicar los cambios.",
         "excludedFoldersSaved": "Se guardaron las carpetas excluidas. Ejecuta un escaneo de la biblioteca para aplicarlas.",
         "settingsAndStoriesSaved": "Los ajustes se guardaron. Ejecuta un escaneo de la biblioteca para aplicar el cambio de carpetas stories.",
         "storiesSaved": "Se guardó el comportamiento de las carpetas stories. Ejecuta un escaneo de la biblioteca para aplicarlo.",
+        "carouselsSaved": "Se guardó el comportamiento de las carpetas de carrusel. Ejecuta un escaneo de la biblioteca para aplicarlo.",
         "defaultsSaved": "Se actualizaron los valores predeterminados de toda la app.",
         "languageSaved": "El idioma predeterminado de la app se guardó como {label}.",
         "homeSaved": "La página de Inicio ahora se abre con {label}.",
@@ -296,6 +326,7 @@
           "appLanguage": "idioma de la app",
           "excludedFolders": "carpetas excluidas",
           "storiesFolderHandling": "comportamiento de las carpetas stories",
+          "carouselsFolderHandling": "comportamiento de las carpetas de carrusel",
           "homeFeedDefault": "predeterminado del feed de Inicio",
           "reelsFeedDefault": "predeterminado de Reels",
           "appFolderOrder": "orden de las carpetas de la app",
@@ -313,6 +344,11 @@
         "title": "Migración heredada de derivados pendiente",
         "messageOne": "{count} registro de medio indexado aún usa las antiguas rutas reflejadas de miniaturas y vistas previas. Ejecuta Escanear biblioteca para moverlo al almacenamiento por clave de recurso.",
         "messageOther": "{count} registros de medios indexados aún usan las antiguas rutas reflejadas de miniaturas y vistas previas. Ejecuta Escanear biblioteca para moverlos al almacenamiento por clave de recurso."
+      },
+      "carouselReconciliation": {
+        "title": "Actualización de carpetas de carrusel pendiente",
+        "scanDescription": "El modo guardado de las carpetas de carrusel aún no se ha aplicado al índice. Ejecuta Escanear biblioteca para actualizar las carpetas y publicaciones.",
+        "rebuildDescription": "El modo guardado de las carpetas de carrusel aún no se ha aplicado al índice. Usa Reconstruir índice de la biblioteca abajo para aplicarlo a la ubicación actual de la galería."
       },
       "scanCard": {
         "title": "Escanear biblioteca",
@@ -334,6 +370,7 @@
         "otherTaskActive": "Hay otra tarea de biblioteca en ejecución. El progreso en vivo aparece en la barra de estado fija.",
         "progress": "El progreso en vivo aparece en la barra de estado fija.",
         "legacyMigration": "Ejecuta Escanear biblioteca para mover miniaturas y vistas previas reflejadas heredadas al diseño de almacenamiento con claves de recursos.",
+        "carouselReconciliation": "Ejecuta Escanear biblioteca para aplicar el modo guardado de las carpetas de carrusel a las carpetas y publicaciones indexadas.",
         "idle": "Los escaneos comprueban medios añadidos, actualizados o faltantes."
       },
       "thumbnailCard": {
@@ -390,6 +427,11 @@
       }
     },
     "notices": {
+      "scanWarning": {
+        "eyebrow": "Aviso de escaneo",
+        "title": "El escaneo terminó con {count} aviso estructural",
+        "title_plural": "El escaneo terminó con {count} avisos estructurales"
+      },
       "scanError": {
         "eyebrow": "El escaneo necesita atención",
         "title": "El último escaneo terminó con errores",
@@ -814,6 +856,13 @@
     }
   },
   "post": {
+    "carousel": {
+      "label": "Carrusel con {count} elementos",
+      "position": "{current} / {count}",
+      "previousItem": "Elemento anterior del carrusel",
+      "nextItem": "Elemento siguiente del carrusel",
+      "open": "Abrir carrusel con {count} elementos"
+    },
     "captionModal": {
       "title": "Editar descripción",
       "captionLabel": "Descripción",

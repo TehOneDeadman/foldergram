@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import {
   APP_DEFAULT_LOCALE_SETTING_KEY,
+  CAROUSELS_APPLIED_MODE_SETTING_KEY,
+  CAROUSELS_MIGRATION_DECISION_SETTING_KEY,
   EXCLUDED_FOLDERS_SETTING_KEY,
   FOLDER_IMAGE_DEFAULT_ORDER_SETTING_KEY,
   HOME_FEED_DEFAULT_MODE_SETTING_KEY,
@@ -13,6 +15,7 @@ import {
   PREVIOUS_GALLERY_ROOT_SETTING_KEY,
   REELS_FEED_DEFAULT_MODE_SETTING_KEY,
   STORIES_MIGRATION_DECISION_SETTING_KEY,
+  TREAT_CAROUSELS_AS_FOLDERS_SETTING_KEY,
   TREAT_STORIES_AS_FOLDERS_SETTING_KEY
 } from '../constants/app-setting-keys.js';
 import { appConfig } from '../config/env.js';
@@ -25,8 +28,10 @@ import {
   imageRepository,
   likeRepository,
   placeRepository,
+  postRepository,
   scanRunRepository
 } from '../db/repositories.js';
+import { parseTreatCarouselsAsFoldersSetting, serializeTreatCarouselsAsFoldersSetting } from '../utils/carousels-utils.js';
 import type {
   CollectionMembershipRecord,
   CollectionSummaryRecord,
@@ -40,6 +45,8 @@ import type {
   MediaType,
   PlaceKind,
   PlaybackStrategy,
+  PostMediaItem,
+  PostRecord,
   SharedFeedItem,
   SharedFolderSummary,
   SharedImageDetail,
@@ -170,7 +177,8 @@ function toViewerSafeScanSummary(scan: ScanSummaryRecord | null) {
 
   return {
     ...scan,
-    error_text: null
+    error_text: null,
+    warning_text: null
   };
 }
 
@@ -222,6 +230,10 @@ function getTreatStoriesAsFolders(): boolean {
   return parseTreatStoriesAsFoldersSetting(appSettingsRepository.get(TREAT_STORIES_AS_FOLDERS_SETTING_KEY));
 }
 
+function getTreatCarouselsAsFolders(): boolean {
+  return parseTreatCarouselsAsFoldersSetting(appSettingsRepository.get(TREAT_CAROUSELS_AS_FOLDERS_SETTING_KEY));
+}
+
 function getCustomExcludedFolders(): string[] {
   return parseExcludedFolderRulesFromSetting(appSettingsRepository.get(EXCLUDED_FOLDERS_SETTING_KEY));
 }
@@ -244,6 +256,18 @@ function getStoriesMigrationStatus() {
   return {
     hasLegacyStoriesCandidates: folderRepository.hasLegacyStoriesCandidates(),
     decisionPending: appSettingsRepository.get(STORIES_MIGRATION_DECISION_SETTING_KEY) === null
+  };
+}
+
+function getCarouselsMigrationStatus() {
+  const decision = appSettingsRepository.get(CAROUSELS_MIGRATION_DECISION_SETTING_KEY);
+  const selectedMode = serializeTreatCarouselsAsFoldersSetting(getTreatCarouselsAsFolders());
+  const appliedMode = appSettingsRepository.get(CAROUSELS_APPLIED_MODE_SETTING_KEY);
+
+  return {
+    hasLegacyCarouselsCandidates: folderRepository.hasLegacyCarouselsCandidates(),
+    decisionPending: decision === null,
+    reconciliationPending: decision !== null && appliedMode !== selectedMode
   };
 }
 
@@ -396,7 +420,7 @@ async function removeFileAndPruneAncestors(rootPath: string, targetPath: string 
       await fsPromises.rmdir(currentDirectory);
     } catch (error) {
       const directoryError = error as NodeJS.ErrnoException;
-      if (directoryError.code === 'ENOENT' || directoryError.code === 'ENOTEMPTY' || directoryError.code === 'EEXIST') {
+      if (directoryError.code === 'ENOENT' || directoryError.code === 'ENOTEMPTY' || directoryError.code === 'EEXIST' || directoryError.code === 'EPERM' || directoryError.code === 'EBUSY') {
         return;
       }
 
@@ -416,7 +440,7 @@ async function removeDirectoryIfEmpty(targetPath: string | null): Promise<void> 
     await fsPromises.rmdir(targetPath);
   } catch (error) {
     const directoryError = error as NodeJS.ErrnoException;
-    if (directoryError.code !== 'ENOENT' && directoryError.code !== 'ENOTEMPTY' && directoryError.code !== 'EEXIST') {
+    if (directoryError.code !== 'ENOENT' && directoryError.code !== 'ENOTEMPTY' && directoryError.code !== 'EEXIST' && directoryError.code !== 'EPERM' && directoryError.code !== 'EBUSY') {
       throw error;
     }
   }
@@ -485,9 +509,11 @@ function getParentFolderDisplayName(folderPath: string): string | null {
 }
 
 function mapFeedImage(image: IndexedFeedImage, derivativeVersion = getDerivativeAssetVersion()): FeedImage {
-  const { playbackStrategy, placeId, placeSlug, placeName, placeKind, placeIsApproximate, isSaved, ...rest } = image;
+  const { playbackStrategy, placeId, placeSlug, placeName, placeKind, placeIsApproximate, isSaved, mediaItems, itemCount, ...rest } = image as any;
   return {
     ...rest,
+    postType: rest.postType ?? 'single',
+    carouselTitle: rest.postType === 'carousel' && rest.sourcePath ? getLeafPathName(rest.sourcePath) : null,
     isAnimated: Boolean(rest.isAnimated),
     isSaved: Boolean(isSaved),
     folderParentName: getParentFolderDisplayName(rest.folderPath),
@@ -498,11 +524,65 @@ function mapFeedImage(image: IndexedFeedImage, derivativeVersion = getDerivative
       mediaType: rest.mediaType,
       previewUrl: rest.previewUrl
     }, false, derivativeVersion),
-    place: mapPlaceSummaryFromRow({ placeId, placeSlug, placeName, placeKind, placeIsApproximate })
+    place: mapPlaceSummaryFromRow({ placeId, placeSlug, placeName, placeKind, placeIsApproximate }),
+    mediaItems: (mediaItems ?? []).map((item: any) => ({
+      imageId: item.imageId,
+      position: item.position,
+      filename: item.filename,
+      mediaType: item.mediaType,
+      width: item.width,
+      height: item.height,
+      durationMs: item.durationMs,
+      isAnimated: Boolean(item.isAnimated),
+      thumbnailUrl: toPublicMediaUrl('/thumbnails', item.thumbnailUrl, derivativeVersion),
+      previewUrl: buildPreviewUrl({
+        id: item.imageId,
+        mediaType: item.mediaType,
+        previewUrl: item.previewUrl
+      }, false, derivativeVersion),
+      originalUrl: buildOriginalUrl(item.imageId),
+      playbackStrategy: item.playbackStrategy ?? 'preview',
+      mimeType: item.mimeType,
+      fileSize: item.fileSize,
+      relativePath: item.relativePath,
+      exif: item.exif ?? null
+    })),
+    itemCount: itemCount ?? (mediaItems ? mediaItems.length : 1)
+  };
+}
+
+function resolvePostRecord(id: number, isLegacyImageAlias = false): PostRecord | undefined {
+  if (isLegacyImageAlias) {
+    return postRepository.findByImageId(id);
+  }
+  return postRepository.findById(id);
+}
+
+function isCoverPost(postId: number): boolean {
+  return postRepository.isExplicitFolderCover(postId);
+}
+
+function mapSharedMediaItem(item: PostMediaItem, derivativeVersion: string | null): PostMediaItem {
+  return {
+    imageId: item.imageId,
+    position: item.position,
+    filename: item.filename,
+    mediaType: item.mediaType,
+    width: item.width,
+    height: item.height,
+    durationMs: item.durationMs,
+    isAnimated: Boolean(item.isAnimated),
+    thumbnailUrl: buildShareThumbnailUrl(item.imageId, derivativeVersion),
+    previewUrl: buildSharePreviewUrl(item.imageId, derivativeVersion),
+    playbackStrategy: item.playbackStrategy ?? 'preview',
+    mimeType: item.mimeType,
+    fileSize: item.fileSize
   };
 }
 
 function mapSharedFeedImage(image: IndexedFeedImage, derivativeVersion = getDerivativeAssetVersion()): SharedFeedItem {
+  const mediaItems = image.mediaItems ?? [];
+  const representativeImageId = mediaItems[0]?.imageId ?? image.id;
   return {
     id: image.id,
     folderId: image.folderId,
@@ -510,22 +590,29 @@ function mapSharedFeedImage(image: IndexedFeedImage, derivativeVersion = getDeri
     folderName: image.folderName,
     filename: image.filename,
     caption: image.caption,
+    carouselTitle: image.postType === 'carousel' && image.sourcePath ? getLeafPathName(image.sourcePath) : null,
     width: image.width,
     height: image.height,
     mediaType: image.mediaType,
     durationMs: image.durationMs,
     isAnimated: Boolean(image.isAnimated),
-    thumbnailUrl: buildShareThumbnailUrl(image.id, derivativeVersion),
-    previewUrl: buildSharePreviewUrl(image.id, derivativeVersion),
-    sortTimestamp: image.sortTimestamp
+    thumbnailUrl: buildShareThumbnailUrl(representativeImageId, derivativeVersion),
+    previewUrl: buildSharePreviewUrl(representativeImageId, derivativeVersion),
+    sortTimestamp: image.sortTimestamp,
+    postType: image.postType ?? 'single',
+    itemCount: image.itemCount ?? (mediaItems.length || 1),
+    mediaItems: mediaItems.map((item) => mapSharedMediaItem(item, derivativeVersion))
   };
 }
 
 function mapImageDetail(image: IndexedImageDetail, derivativeVersion = getDerivativeAssetVersion()): ImageDetail {
-  const { playbackStrategy, exifJson, placeId, placeSlug, placeName, placeKind, placeIsApproximate, isSaved, ...rest } = image;
+  const { playbackStrategy, exifJson, placeId, placeSlug, placeName, placeKind, placeIsApproximate, isSaved, mediaItems, itemCount, ...rest } = image as any;
   const useOriginalForImages = appConfig.imageDetailSource === 'original';
+  const representativeImageId = mediaItems?.[0]?.imageId ?? rest.id;
   return {
     ...rest,
+    postType: rest.postType ?? 'single',
+    carouselTitle: rest.postType === 'carousel' && rest.sourcePath ? getLeafPathName(rest.sourcePath) : null,
     isAnimated: Boolean(rest.isAnimated),
     isSaved: Boolean(isSaved),
     exif: deserializeImageExifData(exifJson),
@@ -533,17 +620,42 @@ function mapImageDetail(image: IndexedImageDetail, derivativeVersion = getDeriva
     folderBreadcrumb: getPathBreadcrumb(rest.folderPath),
     thumbnailUrl: toPublicMediaUrl('/thumbnails', rest.thumbnailUrl, derivativeVersion),
     previewUrl: buildPreviewUrl({
-      id: rest.id,
+      id: representativeImageId,
       mediaType: rest.mediaType,
       previewUrl: rest.previewUrl
     }, useOriginalForImages, derivativeVersion),
-    originalUrl: buildOriginalUrl(rest.id),
+    originalUrl: buildOriginalUrl(representativeImageId),
     playbackStrategy,
-    place: mapPlaceSummaryFromRow({ placeId, placeSlug, placeName, placeKind, placeIsApproximate })
+    place: mapPlaceSummaryFromRow({ placeId, placeSlug, placeName, placeKind, placeIsApproximate }),
+    mediaItems: (mediaItems ?? []).map((item: any) => ({
+      imageId: item.imageId,
+      position: item.position,
+      filename: item.filename,
+      mediaType: item.mediaType,
+      width: item.width,
+      height: item.height,
+      durationMs: item.durationMs,
+      isAnimated: Boolean(item.isAnimated),
+      thumbnailUrl: toPublicMediaUrl('/thumbnails', item.thumbnailUrl, derivativeVersion),
+      previewUrl: buildPreviewUrl({
+        id: item.imageId,
+        mediaType: item.mediaType,
+        previewUrl: item.previewUrl
+      }, false, derivativeVersion),
+      originalUrl: buildOriginalUrl(item.imageId),
+      playbackStrategy: item.playbackStrategy ?? 'preview',
+      mimeType: item.mimeType,
+      fileSize: item.fileSize,
+      relativePath: item.relativePath,
+      exif: item.exif ?? null
+    })),
+    itemCount: itemCount ?? (mediaItems ? mediaItems.length : 1)
   };
 }
 
 function mapSharedImageDetail(image: IndexedImageDetail, derivativeVersion = getDerivativeAssetVersion()): SharedImageDetail {
+  const mediaItems = image.mediaItems ?? [];
+  const representativeImageId = mediaItems[0]?.imageId ?? image.id;
   return {
     id: image.id,
     folderId: image.folderId,
@@ -551,35 +663,29 @@ function mapSharedImageDetail(image: IndexedImageDetail, derivativeVersion = get
     folderName: image.folderName,
     filename: image.filename,
     caption: image.caption,
+    carouselTitle: image.postType === 'carousel' && image.sourcePath ? getLeafPathName(image.sourcePath) : null,
     mediaType: image.mediaType,
     mimeType: image.mimeType,
     width: image.width,
     height: image.height,
     durationMs: image.durationMs,
     isAnimated: Boolean(image.isAnimated),
-    thumbnailUrl: buildShareThumbnailUrl(image.id, derivativeVersion),
-    previewUrl: buildSharePreviewUrl(image.id, derivativeVersion),
+    thumbnailUrl: buildShareThumbnailUrl(representativeImageId, derivativeVersion),
+    previewUrl: buildSharePreviewUrl(representativeImageId, derivativeVersion),
     sortTimestamp: image.sortTimestamp,
     nextImageId: image.nextImageId,
-    previousImageId: image.previousImageId
+    previousImageId: image.previousImageId,
+    postType: image.postType ?? 'single',
+    itemCount: image.itemCount ?? (mediaItems.length || 1),
+    mediaItems: mediaItems.map((item) => mapSharedMediaItem(item, derivativeVersion))
   };
 }
 
 function mapTrashImage(image: IndexedTrashImage, derivativeVersion = getDerivativeAssetVersion()): TrashImage {
-  const { playbackStrategy, placeId, placeSlug, placeName, placeKind, placeIsApproximate, isSaved, ...rest } = image;
+  const mapped = mapFeedImage(image as IndexedFeedImage, derivativeVersion);
   return {
-    ...rest,
-    isAnimated: Boolean(rest.isAnimated),
-    isSaved: Boolean(isSaved),
-    folderParentName: getParentFolderDisplayName(rest.folderPath),
-    folderBreadcrumb: getPathBreadcrumb(rest.folderPath),
-    thumbnailUrl: toPublicMediaUrl('/thumbnails', rest.thumbnailUrl, derivativeVersion),
-    previewUrl: buildPreviewUrl({
-      id: rest.id,
-      mediaType: rest.mediaType,
-      previewUrl: rest.previewUrl
-    }, false, derivativeVersion),
-    place: mapPlaceSummaryFromRow({ placeId, placeSlug, placeName, placeKind, placeIsApproximate })
+    ...mapped,
+    trashedAt: image.trashedAt
   };
 }
 
@@ -598,6 +704,7 @@ function buildFolderSummary(folder: FolderSummaryRecord) {
       folderPath: folder.folder_path,
       breadcrumb: getPathBreadcrumb(folder.folder_path),
       imageCount: folder.image_count,
+      postCount: folder.post_count,
       videoCount: folder.video_count,
       latestImageMtimeMs: folder.latest_image_mtime_ms,
       hasAvatarStory: Boolean(folder.has_avatar_story),
@@ -625,6 +732,7 @@ function buildFolderSummary(folder: FolderSummaryRecord) {
     folderPath: folder.folder_path,
     breadcrumb: getPathBreadcrumb(folder.folder_path),
     imageCount: folder.image_count,
+    postCount: folder.post_count,
     videoCount: folder.video_count,
     latestImageMtimeMs: folder.latest_image_mtime_ms,
     hasAvatarStory: Boolean(folder.has_avatar_story),
@@ -643,6 +751,7 @@ function buildSharedFolderSummary(folder: FolderSummaryRecord): SharedFolderSumm
     name: summary.name,
     description: summary.description,
     imageCount: summary.imageCount,
+    postCount: summary.postCount,
     videoCount: summary.videoCount,
     avatarThumbnailUrl: summary.avatarImageId ? buildShareThumbnailUrl(summary.avatarImageId, derivativeVersion) : null,
     sortTimestamp: summary.latestImageMtimeMs ?? 0
@@ -1453,20 +1562,25 @@ export const galleryService = {
     return buildFolderSummary(folder);
   },
 
-  updateImageCaption(id: number, caption: string | null) {
+  updateImageCaption(id: number, caption: string | null, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed) {
+      return null;
+    }
+
     const defaultFolderImageOrder = getDefaultFolderImageOrder();
-    const existing = imageRepository.getImageDetail(id, undefined, false, defaultFolderImageOrder);
+    const existing = imageRepository.getImageDetail(post.id, undefined, false, defaultFolderImageOrder);
     if (!existing) {
       return null;
     }
 
-    imageRepository.updateCaption(id, caption);
+    postRepository.updateCaption(post.id, caption);
 
-    const updated = imageRepository.getImageDetail(id, undefined, false, defaultFolderImageOrder);
+    const updated = imageRepository.getImageDetail(post.id, undefined, false, defaultFolderImageOrder);
     return updated ? mapImageDetail(updated, getDerivativeAssetVersion()) : null;
   },
 
@@ -1481,7 +1595,11 @@ export const galleryService = {
     }
 
     const image = imageRepository.getById(imageId);
-    if (!image || image.folder_id !== folder.id || image.is_deleted !== 0 || image.is_trashed !== 0) {
+    const imageFolder = image ? folderRepository.getById(image.folder_id) : undefined;
+    const belongsToFolder = image?.folder_id === folder.id || (
+      imageFolder?.role === 'carousel_source' && imageFolder.carousel_owner_folder_id === folder.id
+    );
+    if (!image || !belongsToFolder || image.is_deleted !== 0 || image.is_trashed !== 0) {
       return null;
     }
 
@@ -1563,7 +1681,7 @@ export const galleryService = {
       return null;
     }
 
-    const total = mediaType ? imageRepository.countVisibleByFolder(folder.id, mediaType) : folder.image_count;
+    const total = imageRepository.countVisibleByFolder(folder.id, mediaType);
     const derivativeVersion = getDerivativeAssetVersion();
     const defaultFolderImageOrder = getDefaultFolderImageOrder();
 
@@ -1589,7 +1707,7 @@ export const galleryService = {
       return null;
     }
 
-    const total = mediaType ? imageRepository.countVisibleByFolder(folder.id, mediaType) : folder.image_count;
+    const total = imageRepository.countVisibleByFolder(folder.id, mediaType);
     const derivativeVersion = getDerivativeAssetVersion();
     const defaultFolderImageOrder = getDefaultFolderImageOrder();
 
@@ -1605,15 +1723,20 @@ export const galleryService = {
     };
   },
 
-  getImageDetail(id: number, mediaType?: MediaType) {
+  getImageDetail(id: number, mediaType?: MediaType, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed) {
+      return null;
+    }
+
     const defaultFolderImageOrder = getDefaultFolderImageOrder();
-    let detail = imageRepository.getImageDetail(id, mediaType, false, defaultFolderImageOrder);
+    let detail = imageRepository.getImageDetail(post.id, mediaType, false, defaultFolderImageOrder);
     if (!detail) {
-      const avatarDetail = imageRepository.getImageDetail(id, mediaType, true, defaultFolderImageOrder);
+      const avatarDetail = imageRepository.getImageDetail(post.id, mediaType, true, defaultFolderImageOrder);
       if (avatarDetail && avatarDetail.folderAvatarImageId === avatarDetail.id) {
         detail = avatarDetail;
       }
@@ -1626,13 +1749,18 @@ export const galleryService = {
     return mapImageDetail(detail, getDerivativeAssetVersion());
   },
 
-  getSharedImageDetail(id: number, mediaType?: MediaType) {
+  getSharedImageDetail(id: number, mediaType?: MediaType, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed) {
+      return null;
+    }
+
     const defaultFolderImageOrder = getDefaultFolderImageOrder();
-    const detail = imageRepository.getImageDetail(id, mediaType, false, defaultFolderImageOrder);
+    const detail = imageRepository.getImageDetail(post.id, mediaType, false, defaultFolderImageOrder);
     if (!detail) {
       return null;
     }
@@ -1651,11 +1779,15 @@ export const galleryService = {
     }
 
     const folder = folderRepository.getById(image.folder_id);
-    if (!folder || folder.role !== 'normal') {
+    if (!folder) {
       return null;
     }
 
-    return image;
+    if (folder.role === 'normal') return image;
+    if (folder.role === 'carousel_source' && folder.carousel_owner_folder_id) {
+      return { ...image, folder_id: folder.carousel_owner_folder_id };
+    }
+    return null;
   },
 
   getPlacesStatus() {
@@ -1734,21 +1866,21 @@ export const galleryService = {
     };
   },
 
-  getImageCollections(id: number) {
+  getImageCollections(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed) {
       return null;
     }
 
     const derivativeVersion = getDerivativeAssetVersion();
     return {
-      imageId: id,
-      isSaved: collectionRepository.isImageSaved(id),
-      items: collectionRepository.listMembershipsForImage(id).map((collection) => mapCollectionMembership(collection, derivativeVersion))
+      imageId: post.id,
+      isSaved: collectionRepository.isImageSaved(post.id),
+      items: collectionRepository.listMembershipsForImage(post.id).map((collection) => mapCollectionMembership(collection, derivativeVersion))
     };
   },
 
@@ -1794,59 +1926,59 @@ export const galleryService = {
     return mapCollectionSummary(summary);
   },
 
-  saveImage(id: number) {
+  saveImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed || isCoverPost(post.id)) {
       return null;
     }
 
-    const collection = collectionRepository.saveToDefault(id);
+    const collection = collectionRepository.saveToDefault(post.id);
     const summary = collectionRepository.listSummaries().find((entry) => entry.id === collection.id);
 
     return {
-      id,
-      imageId: id,
-      isSaved: collectionRepository.isImageSaved(id),
+      id: post.id,
+      imageId: post.id,
+      isSaved: collectionRepository.isImageSaved(post.id),
       collection: summary ? mapCollectionSummary(summary) : undefined
     };
   },
 
-  unsaveImage(id: number) {
+  unsaveImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed || isCoverPost(post.id)) {
       return null;
     }
 
-    collectionRepository.unsaveEverywhere(id);
+    collectionRepository.unsaveEverywhere(post.id);
 
     return {
-      id,
-      imageId: id,
+      id: post.id,
+      imageId: post.id,
       isSaved: false
     };
   },
 
-  addImageToCollection(slug: string, id: number) {
+  addImageToCollection(slug: string, id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed || isCoverPost(post.id)) {
       return null;
     }
 
     const collection = slug === collectionConstants.defaultCollectionSlug
-      ? collectionRepository.saveToDefault(id)
-      : collectionRepository.addImage(slug, id);
+      ? collectionRepository.saveToDefault(post.id)
+      : collectionRepository.addImage(slug, post.id);
     if (!collection) {
       return null;
     }
@@ -1854,20 +1986,20 @@ export const galleryService = {
     const summary = collectionRepository.listSummaries().find((entry) => entry.id === collection.id);
 
     return {
-      id,
-      imageId: id,
+      id: post.id,
+      imageId: post.id,
       isSaved: true,
       collection: summary ? mapCollectionSummary(summary) : undefined
     };
   },
 
-  removeImageFromCollection(slug: string, id: number) {
+  removeImageFromCollection(slug: string, id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed || isCoverPost(post.id)) {
       return null;
     }
 
@@ -1877,21 +2009,21 @@ export const galleryService = {
     }
 
     if (collection.is_default === 1) {
-      collectionRepository.unsaveEverywhere(id);
+      collectionRepository.unsaveEverywhere(post.id);
       return {
-        id,
-        imageId: id,
+        id: post.id,
+        imageId: post.id,
         isSaved: false
       };
     }
 
-    collectionRepository.removeImage(slug, id);
+    collectionRepository.removeImage(slug, post.id);
     const summary = collectionRepository.listSummaries().find((entry) => entry.id === collection.id);
 
     return {
-      id,
-      imageId: id,
-      isSaved: collectionRepository.isImageSaved(id),
+      id: post.id,
+      imageId: post.id,
+      isSaved: collectionRepository.isImageSaved(post.id),
       collection: summary ? mapCollectionSummary(summary) : undefined
     };
   },
@@ -1908,88 +2040,88 @@ export const galleryService = {
     };
   },
 
-  likeImage(id: number) {
+  likeImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed || isCoverPost(post.id)) {
       return null;
     }
 
-    likeRepository.upsert(id);
+    likeRepository.upsert(post.id);
 
     return {
-      id,
+      id: post.id,
       liked: true
     };
   },
 
-  unlikeImage(id: number) {
+  unlikeImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const image = imageRepository.getById(id);
-    if (!image || image.is_deleted || image.is_trashed) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed || isCoverPost(post.id)) {
       return null;
     }
 
-    likeRepository.remove(id);
+    likeRepository.remove(post.id);
 
     return {
-      id,
+      id: post.id,
       liked: false
     };
   },
 
-  trashImage(id: number) {
+  trashImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const imageRecord = imageRepository.getById(id);
-    if (!imageRecord || imageRecord.is_deleted) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted) {
       return null;
     }
 
-    const folder = folderRepository.getById(imageRecord.folder_id);
+    const folder = folderRepository.getById(post.folder_id);
     if (!folder) {
       return null;
     }
 
-    if (imageRecord.is_trashed === 0) {
-      imageRepository.moveToTrash(id);
-      folderRepository.syncAvatarSelection(imageRecord.folder_id);
+    if (post.is_trashed === 0) {
+      imageRepository.moveToTrash(post.id);
+      folderRepository.syncAvatarSelection(post.folder_id);
     }
 
     return {
-      id: imageRecord.id,
+      id: post.id,
       folderSlug: folder.slug
     };
   },
 
-  restoreImage(id: number) {
+  restoreImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable) {
       return null;
     }
 
-    const imageRecord = imageRepository.getById(id);
-    if (!imageRecord || imageRecord.is_deleted || imageRecord.is_trashed === 0) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post || post.is_deleted || post.is_trashed === 0) {
       return null;
     }
 
-    const folder = folderRepository.getById(imageRecord.folder_id);
+    const folder = folderRepository.getById(post.folder_id);
     if (!folder) {
       return null;
     }
 
-    imageRepository.restoreFromTrash(id);
-    folderRepository.syncAvatarSelection(imageRecord.folder_id);
+    imageRepository.restoreFromTrash(post.id);
+    folderRepository.syncAvatarSelection(post.folder_id);
 
     return {
-      id: imageRecord.id,
+      id: post.id,
       folderSlug: folder.slug
     };
   },
@@ -2004,11 +2136,17 @@ export const galleryService = {
     const nestedFolderTitleFormat = getNestedFolderTitleFormat();
     const treatStoriesAsFolders = getTreatStoriesAsFolders();
     const storiesMigration = getStoriesMigrationStatus();
+    const treatCarouselsAsFolders = getTreatCarouselsAsFolders();
+    const carouselsMigration = getCarouselsMigrationStatus();
+    const indexedPosts = storageState.libraryAvailable ? imageRepository.countFeed() : 0;
 
     return {
       folders: storageState.libraryAvailable ? folderRepository.count() : 0,
-      indexedImages: storageState.libraryAvailable ? imageRepository.countFeed() : 0,
-      indexedVideos: storageState.libraryAvailable ? imageRepository.countByMediaType('video') : 0,
+      indexedImages: indexedPosts,
+      indexedPosts,
+      indexedMediaAssets: storageState.libraryAvailable ? imageRepository.countVisibleMediaAssets() : 0,
+      indexedCarousels: storageState.libraryAvailable ? imageRepository.countVisibleCarousels() : 0,
+      indexedVideos: storageState.libraryAvailable ? imageRepository.countVisibleSingleVideos() : 0,
       scan: this.getScanProgress(),
       storage: {
         available: storageState.libraryAvailable,
@@ -2025,9 +2163,11 @@ export const galleryService = {
         defaultReelsFeedMode,
         defaultFolderImageOrder,
         nestedFolderTitleFormat,
-        treatStoriesAsFolders
+        treatStoriesAsFolders,
+        treatCarouselsAsFolders
       },
-      storiesMigration
+      storiesMigration,
+      carouselsMigration
     };
   },
 
@@ -2068,12 +2208,17 @@ export const galleryService = {
     const nestedFolderTitleFormat = getNestedFolderTitleFormat();
     const treatStoriesAsFolders = getTreatStoriesAsFolders();
     const storiesMigration = getStoriesMigrationStatus();
+    const treatCarouselsAsFolders = getTreatCarouselsAsFolders();
+    const carouselsMigration = getCarouselsMigrationStatus();
     const excludedFolders = getExcludedFolderSettings();
 
     return {
       folders: storageState.libraryAvailable ? folderRepository.count() : 0,
       indexedImages: storageState.libraryAvailable ? imageRepository.countFeed() : 0,
-      indexedVideos: storageState.libraryAvailable ? imageRepository.countByMediaType('video') : 0,
+      indexedPosts: storageState.libraryAvailable ? imageRepository.countFeed() : 0,
+      indexedMediaAssets: storageState.libraryAvailable ? imageRepository.countVisibleMediaAssets() : 0,
+      indexedCarousels: storageState.libraryAvailable ? imageRepository.countVisibleCarousels() : 0,
+      indexedVideos: storageState.libraryAvailable ? imageRepository.countVisibleSingleVideos() : 0,
       deletedImages: storageState.libraryAvailable ? imageRepository.countDeleted() : 0,
       thumbnailCount: storageState.libraryAvailable ? countDerivativeFilesOnDisk(appConfig.thumbnailsDir) : 0,
       previewCount: storageState.libraryAvailable ? countDerivativeFilesOnDisk(appConfig.previewsDir) : 0,
@@ -2100,9 +2245,11 @@ export const galleryService = {
         defaultReelsFeedMode,
         defaultFolderImageOrder,
         nestedFolderTitleFormat,
-        treatStoriesAsFolders
+        treatStoriesAsFolders,
+        treatCarouselsAsFolders
       },
       storiesMigration,
+      carouselsMigration,
       excludedFolders
     };
   },
@@ -2182,44 +2329,47 @@ export const galleryService = {
     return resolveOriginalMediaFile(id)?.path ?? null;
   },
 
-  async deleteImage(id: number) {
+  async deleteImage(id: number, options: { isLegacyImageAlias?: boolean } = {}) {
     if (!storageService.getState().libraryAvailable || scannerService.isLibraryRebuildRequired()) {
       return null;
     }
 
-    const imageRecord = imageRepository.getById(id);
-    if (!imageRecord) {
+    const post = resolvePostRecord(id, options.isLegacyImageAlias);
+    if (!post) {
       return null;
     }
 
-    const folder = folderRepository.getById(imageRecord.folder_id);
+    const folder = folderRepository.getById(post.folder_id);
     if (!folder) {
       return null;
     }
 
-    const originalPath = resolveIndexedOriginalPath(imageRecord.relative_path);
-    const thumbnailPath = resolveStoredPathWithinRoot(appConfig.thumbnailsDir, imageRecord.thumbnail_path, 'thumbnail');
-    const previewPath = resolveStoredPathWithinRoot(appConfig.previewsDir, imageRecord.preview_path, 'preview');
+    const imageRecords = postRepository.listImageRecords(post.id);
+    const targets = imageRecords.map((imageRecord) => {
+      const originalPath = resolveIndexedOriginalPath(imageRecord.relative_path);
+      if (!originalPath) throw new Error('Stored image path is outside the gallery root');
+      return {
+        originalPath,
+        thumbnailPath: resolveStoredPathWithinRoot(appConfig.thumbnailsDir, imageRecord.thumbnail_path, 'thumbnail'),
+        previewPath: resolveStoredPathWithinRoot(appConfig.previewsDir, imageRecord.preview_path, 'preview')
+      };
+    });
 
-    if (!originalPath) {
-      throw new Error('Stored image path is outside the gallery root');
-    }
-
-    await Promise.all([
+    await Promise.all(targets.flatMap(({ originalPath, thumbnailPath, previewPath }) => [
       removeFileAndPruneAncestors(appConfig.galleryRoot, originalPath),
       removeFileAndPruneAncestors(appConfig.thumbnailsDir, thumbnailPath),
       removeFileAndPruneAncestors(appConfig.previewsDir, previewPath)
-    ]);
+    ]));
 
-    if (folder.avatar_image_id === imageRecord.id) {
-      folderRepository.setAvatar(imageRecord.folder_id, null, 'auto');
+    if (imageRecords.some((imageRecord) => folder.avatar_image_id === imageRecord.id)) {
+      folderRepository.setAvatar(post.folder_id, null, 'auto');
     }
 
-    imageRepository.deleteById(imageRecord.id);
-    folderRepository.syncAvatarSelection(imageRecord.folder_id);
+    postRepository.deletePostAndImages(post.id);
+    folderRepository.syncAvatarSelection(post.folder_id);
 
     return {
-      id: imageRecord.id,
+      id: post.id,
       folderSlug: folder.slug
     };
   },
@@ -2236,13 +2386,17 @@ export const galleryService = {
 
     const deleteSourceFolder = options.deleteSourceFolder === true;
     const normalizedFolderPath = folder.folder_path;
-    const images = imageRepository.listActiveByFolder(folder.id);
+    const ownedFolders = folderRepository
+      .getAll()
+      .filter((entry) => entry.carousel_owner_folder_id === folder.id || entry.story_owner_folder_id === folder.id);
+    const affectedFolderIds = [folder.id, ...ownedFolders.map((entry) => entry.id)];
+    const images = affectedFolderIds.flatMap((id) => imageRepository.listForFolderDeletion(id));
 
     if (deleteSourceFolder) {
       const affectedFolders = folderRepository
         .getAll()
         .filter((entry) => isSameOrDescendantFolderPath(normalizedFolderPath, entry.folder_path));
-      const affectedImages = affectedFolders.flatMap((entry) => imageRepository.listActiveByFolder(entry.id));
+      const affectedImages = affectedFolders.flatMap((entry) => imageRepository.listForFolderDeletion(entry.id));
       const deletedImageCount = affectedImages.length;
 
       await removeDirectoryTree(resolveWithinRoot(appConfig.galleryRoot, path.join(appConfig.galleryRoot, normalizedFolderPath)));
@@ -2291,15 +2445,34 @@ export const galleryService = {
       })
     );
 
-    folderRepository.setAvatar(folder.id, null, 'auto');
-    folderScanStateRepository.delete(normalizedFolderPath);
-    folderRepository.delete(folder.id);
+    for (const affectedFolder of [...ownedFolders, folder]) {
+      folderScanStateRepository.delete(affectedFolder.folder_path);
+      folderRepository.setAvatar(affectedFolder.id, null, 'auto');
+      folderRepository.delete(affectedFolder.id);
+    }
 
-    await Promise.all([
-      removeDirectoryIfEmpty(resolveWithinRoot(appConfig.galleryRoot, path.join(appConfig.galleryRoot, normalizedFolderPath))),
-      removeDirectoryIfEmpty(resolveWithinRoot(appConfig.thumbnailsDir, path.join(appConfig.thumbnailsDir, normalizedFolderPath))),
-      removeDirectoryIfEmpty(resolveWithinRoot(appConfig.previewsDir, path.join(appConfig.previewsDir, normalizedFolderPath)))
-    ]);
+    const cleanupRelativePaths = new Set<string>([normalizedFolderPath]);
+    for (const ownedFolder of ownedFolders) {
+      let candidatePath = ownedFolder.folder_path;
+      while (isSameOrDescendantFolderPath(normalizedFolderPath, candidatePath)) {
+        cleanupRelativePaths.add(candidatePath);
+        if (candidatePath === normalizedFolderPath) break;
+        const parentPath = path.posix.dirname(candidatePath);
+        if (parentPath === candidatePath || parentPath === '.') break;
+        candidatePath = parentPath;
+      }
+    }
+
+    const orderedCleanupPaths = [...cleanupRelativePaths].sort(
+      (left, right) => right.split('/').length - left.split('/').length
+    );
+    for (const relativePath of orderedCleanupPaths) {
+      await Promise.all([
+        removeDirectoryIfEmpty(resolveWithinRoot(appConfig.galleryRoot, path.join(appConfig.galleryRoot, relativePath))),
+        removeDirectoryIfEmpty(resolveWithinRoot(appConfig.thumbnailsDir, path.join(appConfig.thumbnailsDir, relativePath))),
+        removeDirectoryIfEmpty(resolveWithinRoot(appConfig.previewsDir, path.join(appConfig.previewsDir, relativePath)))
+      ]);
+    }
 
     return {
       slug: folder.slug,
@@ -2307,5 +2480,24 @@ export const galleryService = {
       deletedFolderCount: 1,
       deletedSourceFolder: false
     };
+  },
+
+  setTreatCarouselsAsFolders(treatCarouselsAsFolders: boolean) {
+    appSettingsRepository.setMany([
+      {
+        key: TREAT_CAROUSELS_AS_FOLDERS_SETTING_KEY,
+        value: serializeTreatCarouselsAsFoldersSetting(treatCarouselsAsFolders)
+      },
+      {
+        key: CAROUSELS_MIGRATION_DECISION_SETTING_KEY,
+        value: treatCarouselsAsFolders ? 'restore' : 'carousels'
+      }
+    ]);
+
+    return this.getStats();
+  },
+
+  setCarouselsMigrationDecision(decision: 'restore' | 'carousels') {
+    return this.setTreatCarouselsAsFolders(decision === 'restore');
   }
 };

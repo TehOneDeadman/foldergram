@@ -189,7 +189,7 @@ describe.sequential('folder customization', () => {
 
       const updated = galleryService.updateImageCaption(image.id, 'Custom caption');
       expect(updated?.caption).toBe('Custom caption');
-      expect(imageRepository.getById(image.id)?.caption).toBe('Custom caption');
+      expect(imageRepository.getById(image.id)?.caption).toBeNull();
 
       const cleared = galleryService.updateImageCaption(image.id, null);
       expect(cleared?.caption).toBeNull();

@@ -50,13 +50,19 @@ For source installs, you can rerun the migration step directly with:
 pnpm migrate
 ```
 
+Foldergram can automatically resume known migrations that were recorded before
+their schema work began. If the log instead reports a partially present schema,
+do not delete the database; restore a known-good `gallery.sqlite` backup and
+retry the upgrade.
+
 ## Nothing is being indexed
 
 Start with the gallery structure rules:
 
 - files directly inside `GALLERY_ROOT` are ignored
 - hidden folders are ignored
-- a folder is indexed only when it directly contains supported media
+- a folder is indexed when it directly contains supported media
+- in reserved carousel mode, a folder is also indexed when `carousels/` has an immediate child containing supported media directly
 
 This will not be indexed:
 
@@ -241,3 +247,9 @@ If it fails, check for:
 The client actively unregisters previously installed service workers in
 development. Reload once after startup if you previously visited a production
 build from the same origin and the browser still has stale cached assets.
+
+## Carousel scan warnings and reconciliation recovery
+
+Structural carousel warnings appear in **Settings → Scan & Library** without turning a successful scan into a processing failure. Move media placed directly in `carousels/` into a child folder; move nested media directly into that post child; split posts above 20 items; and expect a one-item child to become a normal post with a warning. If carousel children appear as ordinary folders, disable **Treat carousels folders as normal app folders**, save, then run **Scan Library**.
+
+After changing the carousel folder setting, follow the pending update message in **Settings → Scan & Library**. Run **Scan Library** to apply the saved mode, or use **Rebuild Library Index** when Settings reports that a rebuild is required. The reminder remains visible until the index reflects the selected mode.

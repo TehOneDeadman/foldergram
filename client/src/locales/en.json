@@ -149,6 +149,22 @@
         "helper": "Choose a mode here, then save it below. Run a library scan afterward so the indexed folder structure matches.",
         "helperSaving": "Wait for the current settings update to finish first."
       },
+      "carouselsMigration": {
+        "eyebrow": "Carousel Migration",
+        "title": "This library may already use folders named carousels",
+        "description": "Choose whether AppFolder/carousels should create multi-item posts or remain ordinary folders.",
+        "useFeature": "Use Carousel Posts",
+        "keepFolders": "Keep Normal Folders",
+        "helper": "Choose a mode here, then save it below. Run a library scan afterward so indexed folders and carousel posts match."
+      },
+      "carouselsAnnouncement": {
+        "title": "Carousel Posts",
+        "headline": "Reserved carousels/ folders can combine media into one post",
+        "description": "Create one direct child folder inside AppFolder/carousels for each carousel, then place 2–20 images, animated images, or videos directly inside it. Natural filename order controls the slides, and the first item becomes the cover. Numeric filename prefixes are optional.",
+        "dismissAria": "Dismiss carousel posts announcement",
+        "showStructure": "See carousel directory structure",
+        "hideStructure": "Hide carousel directory structure"
+      },
       "announcement": {
         "title": "Stories",
         "headline": "Reserved stories/ folders can power App Folder stories",
@@ -250,6 +266,12 @@
         "enabledDescription": "Legacy mode is enabled. stories folders remain ordinary app folders everywhere.",
         "disabledDescription": "Reserved stories mode is enabled. AppFolder/stories powers avatar stories and highlight circles."
       },
+      "carouselsMode": {
+        "label": "Treat carousels folders as normal app folders",
+        "toggleLabel": "Toggle carousel folders behavior",
+        "enabledDescription": "Legacy mode is enabled. carousels folders remain ordinary app folders.",
+        "disabledDescription": "Reserved carousel mode is enabled. Each direct child of AppFolder/carousels becomes one post."
+      },
       "excludedFolders": {
         "label": "Excluded source folders",
         "description": "Skip matching folders anywhere by name or by exact relative path under the gallery root. Hidden paths and app-managed storage stay excluded automatically.",
@@ -263,29 +285,37 @@
       },
       "actionNote": {
         "loading": "Loading the current app preferences...",
-        "excludedAndOther": "Save the folder exclusion rules with the other app-wide changes. Run a library scan afterward so stories and excluded folders reindex correctly.",
+        "excludedAndOther": "Save the folder exclusion rules with the other app-wide changes. Run a library scan afterward so reserved folder modes and excluded folders reindex correctly.",
         "excludedOnly": "This saves the custom excluded folders only. Run a library scan afterward so those folders disappear from the index.",
-        "storiesAndDefaults": "Save the new stories rule and the updated app defaults together.",
-        "storiesOnly": "This saves the stories folders rule only. Run a library scan afterward to reindex with the new behavior.",
+        "storiesAndDefaults": "Save the folder behavior and updated app defaults together. Run a library scan afterward to reindex the affected folders.",
+        "storiesOnly": "This saves the reserved folder behavior. Run a library scan afterward to reindex with the selected mode.",
         "multipleDefaults": "Save these app defaults together. Language applies immediately in this browser; Home visitors can still switch modes on the homepage; Reels, app folders, and nested folder titles use app defaults.",
         "languageOnly": "This changes the language immediately in this browser. Save it too if you want the selected language to become the app-wide default.",
         "homeOnly": "This updates the first feed mode shown on Home for this app. Visitors can still switch modes from the homepage.",
         "reelsOnly": "This updates the queue style used when Reels opens for this app. Visitors cannot switch modes from the reels page.",
         "folderOnly": "This updates the default photo order used by app folder grids.",
         "nestedFolderTitleOnly": "This updates how nested app folders are labeled throughout the app.",
-        "idle": "These are the current app-wide defaults for language, Home, Reels, app folders, nested folder titles, stories folders, and excluded folders."
+        "carouselReconciliation": "The Carousel folder mode is saved. Complete the library action above to apply it to the index.",
+        "idle": "These are the current app-wide defaults for language, Home, Reels, app folders, nested folder titles, stories folders, carousel folders, and excluded folders."
       },
       "rescanNotice": {
-        "excludedAndStories": "Save these changes, then run a library scan before expecting stories folders and excluded folders to update.",
+        "rebuildRequired": "Save these changes, then rebuild the library index so the selected folder behavior is applied to the current gallery location.",
+        "pendingRebuild": "Rebuild the library index to apply the saved Carousel folder mode to the current gallery location.",
+        "pendingCarousels": "Run a library scan to apply the saved Carousel folder mode to indexed folders and posts.",
+        "excludedAndStories": "Save these changes, then run a library scan to update reserved folder behavior and excluded folders.",
         "excludedOnly": "Save this change, then run a library scan before excluded folders disappear from the index.",
-        "storiesOnly": "Save this change, then run a library scan before expecting stories folders, avatar stories, or highlights to update."
+        "storiesOnly": "Save this change, then run a library scan before expecting stories folders, avatar stories, or highlights to update.",
+        "carouselsOnly": "Save this change, then run a library scan before expecting carousel posts or carousels folders to update.",
+        "storiesAndCarousels": "Save these changes, then run a library scan before expecting stories and carousel folder behavior to update."
       },
       "feedback": {
+        "folderRulesSavedRebuild": "Folder behavior was saved. Rebuild the library index to apply it to the current gallery location.",
         "settingsAndFolderRulesSaved": "Settings were saved. Run a library scan to apply the folder rule changes.",
-        "folderRulesAndStoriesSaved": "Folder exclusion rules and stories folder behavior were saved. Run a library scan to apply them.",
+        "folderRulesSaved": "Folder behavior was saved. Run a library scan to apply the changes.",
         "excludedFoldersSaved": "Excluded folders were saved. Run a library scan to apply them.",
         "settingsAndStoriesSaved": "Settings were saved. Run a library scan to apply the stories folder change.",
         "storiesSaved": "Stories folder behavior was saved. Run a library scan to apply it.",
+        "carouselsSaved": "Carousel folder behavior was saved. Run a library scan to apply it.",
         "defaultsSaved": "App-wide defaults were updated.",
         "languageSaved": "App language default saved as {label}.",
         "homeSaved": "The homepage now opens with {label}.",
@@ -296,6 +326,7 @@
           "appLanguage": "app language",
           "excludedFolders": "excluded folders",
           "storiesFolderHandling": "stories folder handling",
+          "carouselsFolderHandling": "carousel folder handling",
           "homeFeedDefault": "Home feed default",
           "reelsFeedDefault": "Reels feed default",
           "appFolderOrder": "app folder order",
@@ -313,6 +344,11 @@
         "title": "Legacy derivative migration pending",
         "messageOne": "{count} indexed media record still uses the old mirrored thumbnail and preview paths. Run Scan Library to move it into asset-key storage.",
         "messageOther": "{count} indexed media records still use the old mirrored thumbnail and preview paths. Run Scan Library to move them into asset-key storage."
+      },
+      "carouselReconciliation": {
+        "title": "Carousel folder update pending",
+        "scanDescription": "The saved Carousel folder mode has not been applied to the index. Run Scan Library to update folders and posts.",
+        "rebuildDescription": "The saved Carousel folder mode has not been applied to the index. Rebuild Library Index below to apply it to the current gallery location."
       },
       "scanCard": {
         "title": "Scan Library",
@@ -334,6 +370,7 @@
         "otherTaskActive": "Another library task is running. Live progress appears in the sticky status bar.",
         "progress": "Live progress appears in the sticky status bar.",
         "legacyMigration": "Run Scan Library to move legacy mirrored thumbnails and previews into the asset-key storage layout.",
+        "carouselReconciliation": "Run Scan Library to apply the saved Carousel folder mode to indexed folders and posts.",
         "idle": "Scans check for added, updated, or missing media."
       },
       "thumbnailCard": {
@@ -390,6 +427,11 @@
       }
     },
     "notices": {
+      "scanWarning": {
+        "eyebrow": "Scan Warning",
+        "title": "Scan completed with {count} structural warning",
+        "title_plural": "Scan completed with {count} structural warnings"
+      },
       "scanError": {
         "eyebrow": "Scan Needs Attention",
         "title": "The last scan completed with errors",
@@ -814,6 +856,13 @@
     }
   },
   "post": {
+    "carousel": {
+      "label": "Carousel with {count} items",
+      "position": "{current} / {count}",
+      "previousItem": "Previous carousel item",
+      "nextItem": "Next carousel item",
+      "open": "Open carousel with {count} items"
+    },
     "captionModal": {
       "title": "Edit caption",
       "captionLabel": "Caption",

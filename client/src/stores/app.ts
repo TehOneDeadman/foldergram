@@ -109,7 +109,9 @@ export const useAppStore = defineStore('app', {
     defaultReelsFeedMode: (state): ReelsFeedMode => state.stats?.preferences.defaultReelsFeedMode ?? 'random',
     defaultFolderImageOrder: (state): FolderImageOrder => state.stats?.preferences.defaultFolderImageOrder ?? 'newest',
     nestedFolderTitleFormat: (state) => state.stats?.preferences.nestedFolderTitleFormat ?? 'folder',
-    treatStoriesAsFolders: (state) => state.stats?.preferences.treatStoriesAsFolders === true
+    treatStoriesAsFolders: (state) => state.stats?.preferences.treatStoriesAsFolders === true,
+    treatCarouselsAsFolders: (state) => state.stats?.preferences.treatCarouselsAsFolders === true,
+    isCarouselsReconciliationPending: (state) => state.stats?.carouselsMigration?.reconciliationPending === true
   },
   actions: {
     persistOpenedFolderState() {

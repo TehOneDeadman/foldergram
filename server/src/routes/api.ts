@@ -293,6 +293,45 @@ function ensureShareFolderAccess(request: express.Request, response: express.Res
   return true;
 }
 
+const PUBLIC_SENSITIVE_MEDIA_KEYS = new Set([
+  'absolutePath',
+  'exif',
+  'exifJson',
+  'relativePath',
+  'sourcePath'
+]);
+
+function redactPublicMediaMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactPublicMediaMetadata(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !PUBLIC_SENSITIVE_MEDIA_KEYS.has(key))
+      .map(([key, item]) => [key, redactPublicMediaMetadata(item)])
+  );
+}
+
+router.use((request, response, next) => {
+  const isAnonymousPublicViewer =
+    authService.isPublicViewerAccessEnabled() &&
+    !authService.isAuthenticatedRequest(request);
+
+  if (!isAnonymousPublicViewer || request.method.toUpperCase() !== 'GET') {
+    next();
+    return;
+  }
+
+  const sendJson = response.json.bind(response);
+  response.json = ((body: unknown) => sendJson(redactPublicMediaMetadata(body))) as typeof response.json;
+  next();
+});
+
 router.get('/health', (_request, response) => {
   const storageState = storageService.getState();
   response.json({
@@ -828,6 +867,23 @@ router.get('/share/folders/:slug/images', (request, response) => {
 router.get('/share/images/:id', (request, response) => {
   const params = imageIdSchema.parse(request.params);
   const query = mediaTypeQuerySchema.parse(request.query);
+  const image = galleryService.getSharedImageDetail(params.id, query.mediaType, { isLegacyImageAlias: true });
+
+  if (!image) {
+    response.status(404).json({ message: 'Post not found' });
+    return;
+  }
+
+  if (!ensureShareFolderAccess(request, response, image.folderId)) {
+    return;
+  }
+
+  response.json(image);
+});
+
+router.get('/share/posts/:id', (request, response) => {
+  const params = imageIdSchema.parse(request.params);
+  const query = mediaTypeQuerySchema.parse(request.query);
   const image = galleryService.getSharedImageDetail(params.id, query.mediaType);
 
   if (!image) {
@@ -997,9 +1053,10 @@ router.get('/collections/:slug/images', requireCapability('canUseSharedCollectio
   response.json(payload);
 });
 
-router.post('/collections/:slug/images/:id', requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
+router.post(['/collections/:slug/posts/:id', '/collections/:slug/images/:id'], requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
   const params = slugSchema.merge(imageIdSchema).parse(request.params);
-  const payload = galleryService.addImageToCollection(params.slug, params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.addImageToCollection(params.slug, params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Collection or image not found' });
@@ -1012,9 +1069,10 @@ router.post('/collections/:slug/images/:id', requireCapability('canUseSharedColl
   });
 });
 
-router.delete('/collections/:slug/images/:id', requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
+router.delete(['/collections/:slug/posts/:id', '/collections/:slug/images/:id'], requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
   const params = slugSchema.merge(imageIdSchema).parse(request.params);
-  const payload = galleryService.removeImageFromCollection(params.slug, params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.removeImageFromCollection(params.slug, params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Collection or image not found' });
@@ -1032,10 +1090,11 @@ router.get('/trash/images', requireCapability('canDeleteMedia', 'Admin access is
   response.json(galleryService.getTrashImages(query.page, query.limit));
 });
 
-router.get('/images/:id', (request, response) => {
+router.get(['/posts/:id', '/images/:id'], (request, response) => {
   const params = imageIdSchema.parse(request.params);
   const query = mediaTypeQuerySchema.parse(request.query);
-  const image = galleryService.getImageDetail(params.id, query.mediaType);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const image = galleryService.getImageDetail(params.id, query.mediaType, { isLegacyImageAlias });
 
   if (!image) {
     response.status(404).json({ message: 'Post not found' });
@@ -1045,10 +1104,11 @@ router.get('/images/:id', (request, response) => {
   response.json(image);
 });
 
-router.patch('/images/:id/caption', requireCapability('canManageLibrary', 'Admin access is required.'), (request, response) => {
+router.patch(['/posts/:id/caption', '/images/:id/caption'], requireCapability('canManageLibrary', 'Admin access is required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
   const body = patchImageCaptionBodySchema.parse(request.body);
-  const image = galleryService.updateImageCaption(params.id, body.caption);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const image = galleryService.updateImageCaption(params.id, body.caption, { isLegacyImageAlias });
 
   if (!image) {
     response.status(404).json({ message: 'Post not found' });
@@ -1061,9 +1121,10 @@ router.patch('/images/:id/caption', requireCapability('canManageLibrary', 'Admin
   });
 });
 
-router.get('/images/:id/collections', requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
+router.get(['/posts/:id/collections', '/images/:id/collections'], requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.getImageCollections(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.getImageCollections(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Post not found' });
@@ -1073,9 +1134,10 @@ router.get('/images/:id/collections', requireCapability('canUseSharedCollections
   response.json(payload);
 });
 
-router.post('/images/:id/save', requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
+router.post(['/posts/:id/save', '/images/:id/save'], requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.saveImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.saveImage(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Image not found' });
@@ -1088,9 +1150,10 @@ router.post('/images/:id/save', requireCapability('canUseSharedCollections', 'Au
   });
 });
 
-router.delete('/images/:id/save', requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
+router.delete(['/posts/:id/save', '/images/:id/save'], requireCapability('canUseSharedCollections', 'Authentication required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.unsaveImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.unsaveImage(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Image not found' });
@@ -1103,9 +1166,10 @@ router.delete('/images/:id/save', requireCapability('canUseSharedCollections', '
   });
 });
 
-router.post('/images/:id/like', requireCapability('canUseSharedLikes', 'Authentication required.'), (request, response) => {
+router.post(['/posts/:id/like', '/images/:id/like'], requireCapability('canUseSharedLikes', 'Authentication required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.likeImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.likeImage(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Image not found' });
@@ -1118,9 +1182,10 @@ router.post('/images/:id/like', requireCapability('canUseSharedLikes', 'Authenti
   });
 });
 
-router.delete('/images/:id/like', requireCapability('canUseSharedLikes', 'Authentication required.'), (request, response) => {
+router.delete(['/posts/:id/like', '/images/:id/like'], requireCapability('canUseSharedLikes', 'Authentication required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.unlikeImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.unlikeImage(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Image not found' });
@@ -1133,9 +1198,10 @@ router.delete('/images/:id/like', requireCapability('canUseSharedLikes', 'Authen
   });
 });
 
-router.post('/images/:id/trash', requireCapability('canDeleteMedia', 'Admin access is required.'), (request, response) => {
+router.post(['/posts/:id/trash', '/images/:id/trash'], requireCapability('canDeleteMedia', 'Admin access is required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.trashImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.trashImage(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Post not found' });
@@ -1148,9 +1214,10 @@ router.post('/images/:id/trash', requireCapability('canDeleteMedia', 'Admin acce
   });
 });
 
-router.post('/images/:id/restore', requireCapability('canDeleteMedia', 'Admin access is required.'), (request, response) => {
+router.post(['/posts/:id/restore', '/images/:id/restore'], requireCapability('canDeleteMedia', 'Admin access is required.'), (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const payload = galleryService.restoreImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const payload = galleryService.restoreImage(params.id, { isLegacyImageAlias });
 
   if (!payload) {
     response.status(404).json({ message: 'Post not found' });
@@ -1163,12 +1230,13 @@ router.post('/images/:id/restore', requireCapability('canDeleteMedia', 'Admin ac
   });
 });
 
-router.delete('/images/:id', requireCapability('canDeleteMedia', 'Admin access is required.'), async (request, response) => {
+router.delete(['/posts/:id', '/images/:id'], requireCapability('canDeleteMedia', 'Admin access is required.'), async (request, response) => {
   const params = imageIdSchema.parse(request.params);
-  const deleted = await galleryService.deleteImage(params.id);
+  const isLegacyImageAlias = request.path.includes('/images/');
+  const deleted = await galleryService.deleteImage(params.id, { isLegacyImageAlias });
 
   if (!deleted) {
-    response.status(404).json({ message: 'Image not found' });
+    response.status(404).json({ message: 'Post not found' });
     return;
   }
 
@@ -1318,6 +1386,38 @@ router.post(
     ok: true,
     ...galleryService.rebuildPlaces()
   });
+});
+
+router.post('/admin/settings/carousels-as-folders', requireCapability('canAccessSettings', 'Admin access is required.'), adminMutationRateLimiter, (request, response) => {
+  const payloadSchema = z.object({
+    treatCarouselsAsFolders: z.boolean()
+  });
+
+  const body = payloadSchema.parse(request.body);
+
+  try {
+    const stats = galleryService.setTreatCarouselsAsFolders(body.treatCarouselsAsFolders);
+    response.json(stats);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update carousels mode.';
+    response.status(500).json({ message });
+  }
+});
+
+router.post('/admin/settings/carousels-migration-decision', requireCapability('canAccessSettings', 'Admin access is required.'), adminMutationRateLimiter, (request, response) => {
+  const payloadSchema = z.object({
+    decision: z.enum(['restore', 'carousels'])
+  });
+
+  const body = payloadSchema.parse(request.body);
+
+  try {
+    const stats = galleryService.setCarouselsMigrationDecision(body.decision);
+    response.json(stats);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update carousels migration decision.';
+    response.status(500).json({ message });
+  }
 });
 
 router.get('/admin/stats', requireCapability('canAccessSettings', 'Admin access is required.'), (_request, response) => {

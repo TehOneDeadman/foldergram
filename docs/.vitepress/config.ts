@@ -15,6 +15,7 @@ const guideItems = [
 const productItems = [
   { text: 'How It Works', link: '/how-it-works' },
   { text: 'Features', link: '/features' },
+  { text: 'Carousel Posts', link: '/carousel-posts' },
   { text: 'Media Processing', link: '/media-processing' },
   { text: 'Security', link: '/security' }
 ];
