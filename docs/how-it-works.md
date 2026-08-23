@@ -129,9 +129,11 @@ Instead it:
 - keeps their historical row data
 - reactivates them if the same relative path reappears later
 
-Direct user-triggered delete actions are different. Those remove the source file
-and derivatives first, then mark or remove the indexed records as part of the
-delete flow.
+Direct user-triggered permanent delete actions are different. Foldergram first
+moves the source files and derivatives into private quarantine areas within their
+configured storage roots. It then removes the post and related index records in
+one database transaction. If either step fails before the transaction commits,
+the quarantined files are restored and the post remains unchanged.
 
 ## Trash versus permanent delete
 
@@ -141,6 +143,15 @@ Foldergram also supports a separate user trash state for admin delete flows.
 - trashed posts are hidden from feed, folder, detail, likes, and collections surfaces
 - restoring a trashed post makes it visible again without a rescan
 - permanently deleting a post removes the original file plus derivatives
+
+Interrupted permanent deletions are recovered automatically at server startup
+and before another permanent deletion. If the database still contains the post,
+Foldergram restores its quarantined files. If the database transaction already
+committed, Foldergram keeps the post deleted and retries quarantine cleanup.
+Only empty source and derivative directories are pruned. Scans, index rebuilds,
+thumbnail rebuilds, lazy derivative generation, and permanent deletions run one
+at a time so indexing or derivative work cannot race a deletion or remove its
+quarantine data.
 
 This is separate from scan-time `is_deleted`, which tracks missing files on disk.
 

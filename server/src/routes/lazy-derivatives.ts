@@ -9,6 +9,7 @@ import type { ImageRecord } from '../types/models.js';
 import { log } from '../services/log-service.js';
 import { generatePreviewDerivative, generateThumbnailDerivative } from '../services/derivative-service.js';
 import { scannerService } from '../services/scanner-service.js';
+import { maintenanceOperationLock } from '../services/maintenance-operation-lock.js';
 import { resolveOriginalPath } from '../utils/media-paths.js';
 import { applyDerivativeErrorHeaders, applyNoStoreMediaHeaders, applyProtectedMediaHeaders } from '../utils/media-response.js';
 import { normalizePath, safeJoin } from '../utils/path-utils.js';
@@ -18,6 +19,8 @@ const inflightGenerations = new Map<string, Promise<void>>();
 const generationLimit = pLimit(appConfig.scanDerivativeConcurrency);
 
 type SendDerivativeResult = 'sent' | 'aborted';
+
+class DerivativeRecordNotFoundError extends Error {}
 
 function getRequestedPath(request: express.Request): string | null {
   const rawPath = request.params.path;
@@ -33,6 +36,79 @@ function resolveDerivativePath(rootDir: string, requestedPath: string): string |
   } catch {
     return null;
   }
+}
+
+function findCurrentImageRecord(
+  requestedPath: string,
+  kind: 'thumbnail' | 'preview',
+  expectedImageId?: number
+): ImageRecord | null {
+  const imageRecord = kind === 'thumbnail'
+    ? imageRepository.getByThumbnailPath(requestedPath)
+    : imageRepository.getByPreviewPath(requestedPath);
+  if (!imageRecord || (expectedImageId !== undefined && imageRecord.id !== expectedImageId)) {
+    return null;
+  }
+  return imageRecord;
+}
+
+function sendDerivativeNotFound(response: express.Response): void {
+  applyDerivativeErrorHeaders(response);
+  response.status(404).json({ message: 'Derivative not found.' });
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function queueLazyGeneration(
+  absoluteOutputPath: string,
+  requestedPath: string,
+  kind: 'thumbnail' | 'preview',
+  expectedImageId: number
+): Promise<void> {
+  const existingGeneration = inflightGenerations.get(absoluteOutputPath);
+  if (existingGeneration) return existingGeneration;
+
+  const generationWork = generationLimit(() => maintenanceOperationLock.runExclusive(async () => {
+    const imageRecord = findCurrentImageRecord(requestedPath, kind, expectedImageId);
+    if (!imageRecord) throw new DerivativeRecordNotFoundError('Derivative no longer has an indexed image record');
+
+    // A scan or rebuild may have generated the file while this request waited
+    // for the maintenance lock.
+    if (await pathExists(absoluteOutputPath)) return;
+
+    log.info('Lazy derivative generate', {
+      kind,
+      file: requestedPath,
+      source: imageRecord.relative_path
+    });
+
+    const sourcePath = resolveOriginalPath(imageRecord.relative_path);
+    if (kind === 'thumbnail') {
+      await generateThumbnailDerivative(sourcePath, imageRecord.relative_path, false, {
+        thumbnailPath: imageRecord.thumbnail_path
+      });
+      return;
+    }
+
+    await generatePreviewDerivative(sourcePath, imageRecord.relative_path, false, {
+      previewPath: imageRecord.preview_path
+    });
+  }));
+  let trackedGeneration: Promise<void>;
+  trackedGeneration = generationWork.finally(() => {
+    if (inflightGenerations.get(absoluteOutputPath) === trackedGeneration) {
+      inflightGenerations.delete(absoluteOutputPath);
+    }
+  });
+  inflightGenerations.set(absoluteOutputPath, trackedGeneration);
+  return trackedGeneration;
 }
 
 function isConnectionTerminationError(error: unknown): boolean {
@@ -92,6 +168,12 @@ async function serveOrGenerate(
     return;
   }
 
+  const initialImageRecord = findCurrentImageRecord(requestedPath, kind);
+  if (!initialImageRecord) {
+    sendDerivativeNotFound(response);
+    return;
+  }
+
   // Fast path: file already exists.
   try {
     await fs.access(absoluteOutputPath);
@@ -119,54 +201,12 @@ async function serveOrGenerate(
     return;
   }
 
-  // Look up the source row by derivative path.
-  const imageRecord =
-    kind === 'thumbnail'
-      ? imageRepository.getByThumbnailPath(requestedPath)
-      : imageRepository.getByPreviewPath(requestedPath);
-
-  if (!imageRecord) {
-    applyDerivativeErrorHeaders(response);
-    response.status(404).json({ message: 'Derivative not found.' });
-    return;
-  }
-
-  let generationPromise = inflightGenerations.get(absoluteOutputPath);
-
-  if (!generationPromise) {
-    log.info('Lazy derivative generate', {
-      kind,
-      file: requestedPath,
-      source: imageRecord.relative_path
-    });
-
-    generationPromise = generationLimit(async () => {
-      try {
-        const sourcePath = resolveOriginalPath(imageRecord.relative_path);
-
-        if (kind === 'thumbnail') {
-          await generateThumbnailDerivative(sourcePath, imageRecord.relative_path, false, {
-            thumbnailPath: imageRecord.thumbnail_path
-          });
-          return;
-        }
-        await generatePreviewDerivative(sourcePath, imageRecord.relative_path, false, {
-          previewPath: imageRecord.preview_path
-        });
-      } finally {
-        inflightGenerations.delete(absoluteOutputPath);
-      }
-    });
-
-    inflightGenerations.set(absoluteOutputPath, generationPromise);
-  }
-
-  const queuedGeneration = generationPromise;
-  if (!queuedGeneration) {
-    applyDerivativeErrorHeaders(response);
-    response.status(500).json({ message: 'Failed to queue derivative generation.' });
-    return;
-  }
+  const queuedGeneration = queueLazyGeneration(
+    absoluteOutputPath,
+    requestedPath,
+    kind,
+    initialImageRecord.id
+  );
 
   try {
     await queuedGeneration;
@@ -175,9 +215,18 @@ async function serveOrGenerate(
       return;
     }
 
+    if (error instanceof DerivativeRecordNotFoundError) {
+      sendDerivativeNotFound(response);
+      return;
+    }
     const message = error instanceof Error ? error.message : 'Failed to generate derivative.';
     applyDerivativeErrorHeaders(response);
     response.status(500).json({ message });
+    return;
+  }
+
+  if (!findCurrentImageRecord(requestedPath, kind, initialImageRecord.id)) {
+    sendDerivativeNotFound(response);
     return;
   }
 
@@ -211,6 +260,12 @@ export async function serveDerivativeForImage(
     return;
   }
 
+  const initialImageRecord = findCurrentImageRecord(requestedPath, kind, imageRecord.id);
+  if (!initialImageRecord) {
+    sendDerivativeNotFound(response);
+    return;
+  }
+
   try {
     await fs.access(absoluteOutputPath);
     try {
@@ -237,36 +292,12 @@ export async function serveDerivativeForImage(
     return;
   }
 
-  let generationPromise = inflightGenerations.get(absoluteOutputPath);
-
-  if (!generationPromise) {
-    log.info('Lazy derivative generate', {
-      kind,
-      file: requestedPath,
-      source: imageRecord.relative_path
-    });
-
-    generationPromise = generationLimit(async () => {
-      try {
-        const sourcePath = resolveOriginalPath(imageRecord.relative_path);
-
-        if (kind === 'thumbnail') {
-          await generateThumbnailDerivative(sourcePath, imageRecord.relative_path, false, {
-            thumbnailPath: imageRecord.thumbnail_path
-          });
-          return;
-        }
-
-        await generatePreviewDerivative(sourcePath, imageRecord.relative_path, false, {
-          previewPath: imageRecord.preview_path
-        });
-      } finally {
-        inflightGenerations.delete(absoluteOutputPath);
-      }
-    });
-
-    inflightGenerations.set(absoluteOutputPath, generationPromise);
-  }
+  const generationPromise = queueLazyGeneration(
+    absoluteOutputPath,
+    requestedPath,
+    kind,
+    initialImageRecord.id
+  );
 
   try {
     await generationPromise;
@@ -275,9 +306,18 @@ export async function serveDerivativeForImage(
       return;
     }
 
+    if (error instanceof DerivativeRecordNotFoundError) {
+      sendDerivativeNotFound(response);
+      return;
+    }
     const message = error instanceof Error ? error.message : 'Failed to generate derivative.';
     applyDerivativeErrorHeaders(response);
     response.status(500).json({ message });
+    return;
+  }
+
+  if (!findCurrentImageRecord(requestedPath, kind, initialImageRecord.id)) {
+    sendDerivativeNotFound(response);
     return;
   }
 

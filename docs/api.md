@@ -1623,7 +1623,10 @@ Permanently deletes every physical member of the post:
 - each preview derivative
 
 A single-item post has one member; a carousel has all of its ordered members
-removed. The endpoint then updates the index and folder avatar state.
+removed. Files are quarantined before the post, its relationships, and folder
+avatar state are updated in one database transaction. A pre-commit failure
+restores the files and leaves the post unchanged. Interrupted operations are
+recovered automatically without making a committed deletion visible again.
 
 Success:
 

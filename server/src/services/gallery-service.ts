@@ -69,6 +69,7 @@ import { parseTreatStoriesAsFoldersSetting, serializeTreatStoriesAsFoldersSettin
 import { scannerService } from './scanner-service.js';
 import { storageService } from './storage-service.js';
 import { geodataService, placeResolutionService } from './place-service.js';
+import { permanentDeletionService } from './permanent-deletion-service.js';
 
 type FeedMode = 'recent' | 'rediscover' | 'random';
 type ReelsFeedMode = 'recommended' | 'recent' | 'random';
@@ -2339,39 +2340,7 @@ export const galleryService = {
       return null;
     }
 
-    const folder = folderRepository.getById(post.folder_id);
-    if (!folder) {
-      return null;
-    }
-
-    const imageRecords = postRepository.listImageRecords(post.id);
-    const targets = imageRecords.map((imageRecord) => {
-      const originalPath = resolveIndexedOriginalPath(imageRecord.relative_path);
-      if (!originalPath) throw new Error('Stored image path is outside the gallery root');
-      return {
-        originalPath,
-        thumbnailPath: resolveStoredPathWithinRoot(appConfig.thumbnailsDir, imageRecord.thumbnail_path, 'thumbnail'),
-        previewPath: resolveStoredPathWithinRoot(appConfig.previewsDir, imageRecord.preview_path, 'preview')
-      };
-    });
-
-    await Promise.all(targets.flatMap(({ originalPath, thumbnailPath, previewPath }) => [
-      removeFileAndPruneAncestors(appConfig.galleryRoot, originalPath),
-      removeFileAndPruneAncestors(appConfig.thumbnailsDir, thumbnailPath),
-      removeFileAndPruneAncestors(appConfig.previewsDir, previewPath)
-    ]));
-
-    if (imageRecords.some((imageRecord) => folder.avatar_image_id === imageRecord.id)) {
-      folderRepository.setAvatar(post.folder_id, null, 'auto');
-    }
-
-    postRepository.deletePostAndImages(post.id);
-    folderRepository.syncAvatarSelection(post.folder_id);
-
-    return {
-      id: post.id,
-      folderSlug: folder.slug
-    };
+    return permanentDeletionService.deletePost(post.id);
   },
 
   async deleteFolder(slug: string, options: DeleteFolderOptions = {}) {

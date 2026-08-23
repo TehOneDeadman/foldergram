@@ -1271,14 +1271,51 @@ export const postRepository = {
   },
 
   deletePostAndImages(postId: number): { id: number; folderSlug: string } | undefined {
-    const post = this.findById(postId);
-    if (!post) return undefined;
-    const folder = folderRepository.getById(post.folder_id);
-    const imageIds = this.listImageRecords(post.id).map((image) => image.id);
-    database.prepare('DELETE FROM posts WHERE id = ?').run(post.id);
-    const deleteImage = database.prepare('DELETE FROM images WHERE id = ?');
-    for (const imageId of imageIds) deleteImage.run(imageId);
-    return { id: post.id, folderSlug: folder?.slug ?? '' };
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const post = this.findById(postId);
+      if (!post) {
+        database.exec('ROLLBACK');
+        return undefined;
+      }
+
+      const folder = folderRepository.getById(post.folder_id);
+      const imageIds = this.listImageRecords(post.id).map((image) => image.id);
+      const affectedAvatarFolderIds = new Set<number>([post.folder_id]);
+
+      if (imageIds.length > 0) {
+        const placeholders = imageIds.map(() => '?').join(', ');
+        const avatarRows = database
+          .prepare(`SELECT id FROM folders WHERE avatar_image_id IN (${placeholders})`)
+          .all(...imageIds) as Array<{ id: number }>;
+        for (const avatarRow of avatarRows) {
+          affectedAvatarFolderIds.add(avatarRow.id);
+        }
+
+        database
+          .prepare(`UPDATE folders SET avatar_image_id = NULL, avatar_source = 'auto', updated_at = ? WHERE avatar_image_id IN (${placeholders})`)
+          .run(nowIso(), ...imageIds);
+      }
+
+      database.prepare('DELETE FROM likes WHERE post_id = ?').run(post.id);
+      database.prepare('DELETE FROM collection_items WHERE post_id = ?').run(post.id);
+      database.prepare('DELETE FROM post_items WHERE post_id = ?').run(post.id);
+      database.prepare('DELETE FROM posts WHERE id = ?').run(post.id);
+      const deleteImage = database.prepare('DELETE FROM images WHERE id = ?');
+      for (const imageId of imageIds) {
+        deleteImage.run(imageId);
+      }
+
+      for (const folderId of affectedAvatarFolderIds) {
+        folderRepository.syncAvatarSelection(folderId);
+      }
+
+      database.exec('COMMIT');
+      return { id: post.id, folderSlug: folder?.slug ?? '' };
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
   },
 
   hydratePostItems(posts: FeedPost[]): FeedPost[] {

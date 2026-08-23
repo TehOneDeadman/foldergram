@@ -34,6 +34,10 @@ import {
   type DerivativeMigrationSummary
 } from './derivative-migration-service.js';
 import { libraryRelocationService } from './library-relocation-service.js';
+import {
+  maintenanceOperationLock,
+  PERMANENT_DELETION_QUARANTINE_DIRECTORY_NAME
+} from './maintenance-operation-lock.js';
 import { log } from './log-service.js';
 import { placeResolutionService } from './place-service.js';
 import { storageService } from './storage-service.js';
@@ -722,7 +726,12 @@ class ScannerService {
       if (options.beforeEnqueue) {
         options.beforeEnqueue();
       }
-      this.queue = this.queue.then(job, job);
+      const runWithMaintenanceLock = () => maintenanceOperationLock.runExclusive(async () => {
+        const { permanentDeletionService } = await import('./permanent-deletion-service.js');
+        await permanentDeletionService.recoverPendingDeletionsWhileLocked();
+        return job();
+      });
+      this.queue = this.queue.then(runWithMaintenanceLock, runWithMaintenanceLock);
       return await this.queue;
     } finally {
       this.activeOrQueuedJobs--;
@@ -959,8 +968,11 @@ class ScannerService {
   }
 
   private async resetDerivativeDirectory(targetDirectory: string): Promise<void> {
-    await fs.rm(targetDirectory, { recursive: true, force: true });
     await fs.mkdir(targetDirectory, { recursive: true });
+    const entries = await fs.readdir(targetDirectory, { withFileTypes: true });
+    await Promise.all(entries
+      .filter((entry) => entry.name !== PERMANENT_DELETION_QUARANTINE_DIRECTORY_NAME)
+      .map((entry) => fs.rm(path.join(targetDirectory, entry.name), { recursive: true, force: true })));
     await fs.writeFile(path.join(targetDirectory, DERIVATIVE_CACHE_KEEP_FILE), '');
   }
 
