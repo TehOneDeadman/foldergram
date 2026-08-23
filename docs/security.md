@@ -14,6 +14,9 @@ optional admin/viewer/public access gate for homelab and LAN use.
 - you run it on your own machine or behind a trusted local-network or reverse-proxy setup
 - the app is not exposed directly to the public internet without additional protection
 - the built-in auth story is a small role-based password gate, not a multi-user account system
+- processes and accounts with write access to the configured gallery, thumbnail,
+  and preview roots are trusted not to replace directories while Foldergram is
+  performing a delete or recovery operation
 
 ## Password protection
 
@@ -144,7 +147,19 @@ when skip mode records supported-media failures.
 
 Delete flows resolve target files and directories inside configured roots before
 removing them. If a stored path falls outside the expected root, the operation
-throws instead of deleting blindly.
+throws instead of deleting blindly. Permanent deletion also rejects symbolic-link
+path components, verifies file and parent-directory identities around each
+filesystem mutation, and serializes its own scans, rebuilds, lazy derivative
+generation, recovery, and deletion work.
+
+This confinement guarantee covers Foldergram's own concurrent operations and
+filesystem state present when an operation is validated. It is not a security
+boundary against another process or account that can write to those same roots
+and deliberately swap a checked directory at the exact moment of a rename or
+unlink. Preventing that race requires platform-specific directory-handle-relative
+filesystem operations that Foldergram does not currently use. Keep these storage
+roots private to the account running Foldergram and pause other filesystem writers
+during permanent deletion or recovery.
 
 ## Storage availability behavior
 

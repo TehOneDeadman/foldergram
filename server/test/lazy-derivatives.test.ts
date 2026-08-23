@@ -18,6 +18,8 @@ type AppConfigModule = typeof import('../src/config/env.js');
 type AuthServiceModule = typeof import('../src/services/auth-service.js');
 type LazyRoutesModule = typeof import('../src/routes/lazy-derivatives.js');
 type ScannerServiceModule = typeof import('../src/services/scanner-service.js');
+type MaintenanceLockModule = typeof import('../src/services/maintenance-operation-lock.js');
+type PermanentDeletionModule = typeof import('../src/services/permanent-deletion-service.js');
 type RepositoriesModule = typeof import('../src/db/repositories.js');
 type ModelsModule = typeof import('../src/types/models.js');
 
@@ -36,8 +38,11 @@ describe.sequential('DERIVATIVE_MODE lazy behavior', () => {
   let lazyThumbnailsRouter: LazyRoutesModule['lazyThumbnailsRouter'];
   let lazyPreviewsRouter: LazyRoutesModule['lazyPreviewsRouter'];
   let scannerService: ScannerServiceModule['scannerService'];
+  let maintenanceOperationLock: MaintenanceLockModule['maintenanceOperationLock'];
+  let permanentDeletionService: PermanentDeletionModule['permanentDeletionService'];
   let folderRepository: RepositoriesModule['folderRepository'];
   let imageRepository: RepositoriesModule['imageRepository'];
+  let postRepository: RepositoriesModule['postRepository'];
   let maintenanceRepository: RepositoriesModule['maintenanceRepository'];
   let appSettingsRepository: RepositoriesModule['appSettingsRepository'];
 
@@ -71,7 +76,9 @@ describe.sequential('DERIVATIVE_MODE lazy behavior', () => {
     ({ authService } = await import('../src/services/auth-service.js'));
     ({ lazyThumbnailsRouter, lazyPreviewsRouter } = await import('../src/routes/lazy-derivatives.js'));
     ({ scannerService } = await import('../src/services/scanner-service.js'));
-    ({ folderRepository, imageRepository, maintenanceRepository, appSettingsRepository } = await import('../src/db/repositories.js'));
+    ({ maintenanceOperationLock } = await import('../src/services/maintenance-operation-lock.js'));
+    ({ permanentDeletionService } = await import('../src/services/permanent-deletion-service.js'));
+    ({ folderRepository, imageRepository, postRepository, maintenanceRepository, appSettingsRepository } = await import('../src/db/repositories.js'));
 
     await Promise.all([
       fs.mkdir(appConfig.galleryRoot, { recursive: true }),
@@ -376,6 +383,108 @@ describe.sequential('DERIVATIVE_MODE lazy behavior', () => {
     expect(secondResponse.statusCode).toBe(200);
     expect(secondResponse.body).toBe(`thumbnail:${image.relative_path}`);
     expect(generateThumbnailDerivativeMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not serve an existing orphaned derivative after its image record is deleted', async () => {
+    await reset('lazy');
+
+    await createSourceFile('orphaned/photo.jpg');
+    await scannerService.scanAll('test');
+    const image = imageRepository.listActive()[0]!;
+    const post = postRepository.findByImageId(image.id)!;
+    const thumbnailPath = path.join(appConfig.thumbnailsDir, image.thumbnail_path);
+    await fs.mkdir(path.dirname(thumbnailPath), { recursive: true });
+    await fs.writeFile(thumbnailPath, 'orphaned-thumbnail');
+    postRepository.deletePostAndImages(post.id);
+
+    const response = await dispatchRoute(lazyThumbnailsRouter, `/${encodeRelativePath(image.thumbnail_path)}`);
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).toEqual({ message: 'Derivative not found.' });
+    expect(generateThumbnailDerivativeMock).not.toHaveBeenCalled();
+  });
+
+  it('revalidates the image record after waiting for the maintenance lock', async () => {
+    await reset('lazy');
+
+    await createSourceFile('stale/photo.jpg');
+    await scannerService.scanAll('test');
+    const image = imageRepository.listActive()[0]!;
+    const post = postRepository.findByImageId(image.id)!;
+    let releaseLock!: () => void;
+    let reportLockAcquired!: () => void;
+    const lockAcquired = new Promise<void>((resolve) => {
+      reportLockAcquired = resolve;
+    });
+    const releaseLockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const blocker = maintenanceOperationLock.runExclusive(async () => {
+      reportLockAcquired();
+      await releaseLockPromise;
+      postRepository.deletePostAndImages(post.id);
+    });
+    await lockAcquired;
+
+    const request = dispatchRoute(lazyThumbnailsRouter, `/${encodeRelativePath(image.thumbnail_path)}`);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseLock();
+    await blocker;
+    const response = await request;
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).toEqual({ message: 'Derivative not found.' });
+    expect(generateThumbnailDerivativeMock).not.toHaveBeenCalled();
+    await expect(fs.access(path.join(appConfig.thumbnailsDir, image.thumbnail_path))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('keeps lazy generation and permanent deletion mutually exclusive', async () => {
+    await reset('lazy');
+
+    await createSourceFile('delete-race/photo.jpg');
+    await scannerService.scanAll('test');
+    const image = imageRepository.listActive()[0]!;
+    const post = postRepository.findByImageId(image.id)!;
+    let releaseGeneration!: () => void;
+    let reportGenerationStarted!: () => void;
+    const generationStarted = new Promise<void>((resolve) => {
+      reportGenerationStarted = resolve;
+    });
+    const releaseGenerationPromise = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    generateThumbnailDerivativeMock.mockImplementationOnce(async (_src: string, relativePath: string) => {
+      reportGenerationStarted();
+      await releaseGenerationPromise;
+      const thumbnailPath = getThumbnailRelativePath(relativePath);
+      const thumbnailAbsolutePath = path.join(appConfig.thumbnailsDir, thumbnailPath);
+      await fs.mkdir(path.dirname(thumbnailAbsolutePath), { recursive: true });
+      await fs.writeFile(thumbnailAbsolutePath, `thumbnail:${relativePath}`);
+      return { thumbnailPath, generatedThumbnail: true };
+    });
+
+    const request = dispatchRoute(lazyThumbnailsRouter, `/${encodeRelativePath(image.thumbnail_path)}`);
+    await generationStarted;
+    let deletionFinished = false;
+    const deletion = permanentDeletionService.deletePost(post.id).then((result) => {
+      deletionFinished = true;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(deletionFinished).toBe(false);
+    expect(postRepository.findById(post.id)).toBeDefined();
+
+    releaseGeneration();
+    const [requestOutcome, deletionOutcome] = await Promise.all([
+      request.catch((error: unknown) => error),
+      deletion
+    ]);
+
+    expect(requestOutcome).toBeDefined();
+    expect(deletionOutcome).toEqual({ id: post.id, folderSlug: 'delete-race' });
+    expect(postRepository.findById(post.id)).toBeUndefined();
+    expect(imageRepository.getById(image.id)).toBeUndefined();
+    await expect(fs.access(path.join(appConfig.thumbnailsDir, image.thumbnail_path))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('generates a missing thumbnail from the current gallery root when the cached absolute path is stale', async () => {

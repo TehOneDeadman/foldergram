@@ -22,6 +22,7 @@ import { appConfig } from "./config/env.js";
 import { createApp } from "./app.js";
 import { collectionRepository } from "./db/repositories.js";
 import { log } from "./services/log-service.js";
+import { permanentDeletionService } from "./services/permanent-deletion-service.js";
 import { scannerService } from "./services/scanner-service.js";
 import { watcherService } from "./services/watcher-service.js";
 
@@ -48,6 +49,7 @@ function logServerReady(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  await permanentDeletionService.recoverPendingDeletions();
   const app = createApp();
   const server = createServer(app);
   const portVariableName = appConfig.nodeEnv === "production" ? "SERVER_PORT" : "DEV_SERVER_PORT";
@@ -95,4 +97,7 @@ async function bootstrap(): Promise<void> {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
-void bootstrap();
+void bootstrap().catch((error: unknown) => {
+  log.error("Server startup failed", error);
+  process.exitCode = 1;
+});
