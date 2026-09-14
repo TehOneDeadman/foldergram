@@ -116,7 +116,7 @@
       <button
         @click="currentCategory = 'library'"
         class="flex min-h-[3.15rem] items-center justify-center rounded-[0.95rem] border-0 bg-transparent p-0 text-muted transition-colors duration-150 cursor-pointer"
-        :class="currentCategory === 'library' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text'"
+        :class="currentCategory === 'library' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         :aria-label="t('settings.sections.library.shortLabel')"
       >
         <span class="h-[1.55rem] w-[1.55rem]" :class="currentCategory === 'library' ? 'i-fluent-folder-sync-20-filled' : 'i-fluent-folder-sync-20-regular'" aria-hidden="true"></span>
@@ -124,7 +124,7 @@
       <button
         @click="currentCategory = 'general'"
         class="flex min-h-[3.15rem] items-center justify-center rounded-[0.95rem] border-0 bg-transparent p-0 text-muted transition-colors duration-150 cursor-pointer"
-        :class="currentCategory === 'general' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text'"
+        :class="currentCategory === 'general' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         :aria-label="t('settings.sections.general.label')"
       >
         <span class="h-[1.55rem] w-[1.55rem]" :class="currentCategory === 'general' ? 'i-fluent-settings-20-filled' : 'i-fluent-settings-20-regular'" aria-hidden="true"></span>
@@ -132,7 +132,7 @@
       <button
         @click="currentCategory = 'places'"
         class="flex min-h-[3.15rem] items-center justify-center rounded-[0.95rem] border-0 bg-transparent p-0 text-muted transition-colors duration-150 cursor-pointer"
-        :class="currentCategory === 'places' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text'"
+        :class="currentCategory === 'places' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         :aria-label="t('settings.sections.places.label')"
       >
         <span class="h-[1.55rem] w-[1.55rem]" :class="currentCategory === 'places' ? 'i-fluent-location-20-filled' : 'i-fluent-location-20-regular'" aria-hidden="true"></span>
@@ -140,7 +140,7 @@
       <button
         @click="currentCategory = 'access'"
         class="flex min-h-[3.15rem] items-center justify-center rounded-[0.95rem] border-0 bg-transparent p-0 text-muted transition-colors duration-150 cursor-pointer"
-        :class="currentCategory === 'access' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text'"
+        :class="currentCategory === 'access' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         :aria-label="t('settings.sections.access.shortLabel')"
       >
         <span class="h-[1.55rem] w-[1.55rem]" :class="currentCategory === 'access' ? 'i-fluent-lock-shield-20-filled' : 'i-fluent-lock-shield-20-regular'" aria-hidden="true"></span>
@@ -148,7 +148,7 @@
       <button
         @click="currentCategory = 'status'"
         class="flex min-h-[3.15rem] items-center justify-center rounded-[0.95rem] border-0 bg-transparent p-0 text-muted transition-colors duration-150 cursor-pointer"
-        :class="currentCategory === 'status' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text'"
+        :class="currentCategory === 'status' ? 'bg-surface-alt text-text' : 'hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         :aria-label="t('settings.sections.status.label')"
       >
         <span class="h-[1.55rem] w-[1.55rem]" :class="currentCategory === 'status' ? 'i-fluent-data-usage-20-filled' : 'i-fluent-data-usage-20-regular'" aria-hidden="true"></span>
@@ -164,7 +164,7 @@
         <button
           @click="currentCategory = 'library'"
           class="flex items-start gap-3 rounded-[0.85rem] border-0 px-4 py-[0.85rem] text-left text-[1rem] transition-colors duration-150 cursor-pointer"
-          :class="currentCategory === 'library' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text'"
+          :class="currentCategory === 'library' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         >
           <span class="mt-[0.1rem] h-[1.25rem] w-[1.25rem] shrink-0" :class="currentCategory === 'library' ? 'i-fluent-folder-sync-20-filled' : 'i-fluent-folder-sync-20-regular'" aria-hidden="true"></span>
           <span class="flex min-w-0 flex-col gap-[0.1rem]">
@@ -175,7 +175,7 @@
         <button
           @click="currentCategory = 'general'"
           class="flex items-start gap-3 rounded-[0.85rem] border-0 px-4 py-[0.85rem] text-left text-[1rem] transition-colors duration-150 cursor-pointer"
-          :class="currentCategory === 'general' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text'"
+          :class="currentCategory === 'general' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         >
           <span class="mt-[0.1rem] h-[1.25rem] w-[1.25rem] shrink-0" :class="currentCategory === 'general' ? 'i-fluent-settings-20-filled' : 'i-fluent-settings-20-regular'" aria-hidden="true"></span>
           <span class="flex flex-col gap-[0.1rem] min-w-0">
@@ -186,7 +186,7 @@
         <button
           @click="currentCategory = 'places'"
           class="flex items-start gap-3 rounded-[0.85rem] border-0 px-4 py-[0.85rem] text-left text-[1rem] transition-colors duration-150 cursor-pointer"
-          :class="currentCategory === 'places' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text'"
+          :class="currentCategory === 'places' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         >
           <span class="mt-[0.1rem] h-[1.25rem] w-[1.25rem] shrink-0" :class="currentCategory === 'places' ? 'i-fluent-location-20-filled' : 'i-fluent-location-20-regular'" aria-hidden="true"></span>
           <span class="flex flex-col gap-[0.1rem] min-w-0">
@@ -197,7 +197,7 @@
         <button
           @click="currentCategory = 'access'"
           class="flex items-start gap-3 rounded-[0.85rem] border-0 px-4 py-[0.85rem] text-left text-[1rem] transition-colors duration-150 cursor-pointer"
-          :class="currentCategory === 'access' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text'"
+          :class="currentCategory === 'access' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         >
           <span class="mt-[0.1rem] h-[1.25rem] w-[1.25rem] shrink-0" :class="currentCategory === 'access' ? 'i-fluent-lock-shield-20-filled' : 'i-fluent-lock-shield-20-regular'" aria-hidden="true"></span>
           <span class="flex flex-col gap-[0.1rem] min-w-0">
@@ -208,7 +208,7 @@
         <button
           @click="currentCategory = 'status'"
           class="flex items-start gap-3 rounded-[0.85rem] border-0 px-4 py-[0.85rem] text-left text-[1rem] transition-colors duration-150 cursor-pointer"
-          :class="currentCategory === 'status' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text'"
+          :class="currentCategory === 'status' ? 'bg-surface-alt font-bold text-text' : 'bg-transparent text-muted hover:bg-surface-hover hover:text-text settings-nav-buttons'"
         >
           <span class="mt-[0.1rem] h-[1.25rem] w-[1.25rem] shrink-0" :class="currentCategory === 'status' ? 'i-fluent-data-usage-20-filled' : 'i-fluent-data-usage-20-regular'" aria-hidden="true"></span>
           <span class="flex flex-col gap-[0.1rem] min-w-0">
@@ -3146,3 +3146,8 @@ watch(
   }
 );
 </script>
+<style scoped>
+  .settings-nav-buttons {
+    background: rgba(0,0,0,0.7);
+  }
+</style>
